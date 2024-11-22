@@ -10,7 +10,7 @@
 
 ## Introduction
 
-The HD Hyundai Robotics Robots ROS2 Driver provides a ROS 2 interface for controlling HD Hyundai robotic arms. This driver allows users to integrate HD Hyundai robots into ROS 2 applications, enabling advanced robotic functionalities such as motion planning, perception, and AI integration.
+The HD Hyundai Robotics Robots ROS2 Driver provides a ROS 2 interface for controlling HD Hyundai robots. This driver allows users to integrate HD Hyundai robots into ROS 2 applications, enabling advanced robotic functionalities such as motion planning, perception, and AI integration.
 
 For detailed information, refer to the following documentation:
 [https://hrbook-hrc.web.app/#/view/doc-hr-simulation-gz/english/README](https://hrbook-hrc.web.app/#/view/doc-hr-simulation-gz/english/README)
@@ -20,29 +20,33 @@ For detailed information, refer to the following documentation:
 * Operating System: Ubuntu 22.04 LTS
 * ROS Version: ROS 2 Humble Hawksbill
 
-## Packages
+## Packages in the Repository:
 
 | Package Name | Description |
 |--------------|-------------|
-| **hr_ros2_launch** | Contains ROS 2 launch files and configuration parameters for starting the robot driver. |
-| **install** | Includes installation scripts and necessary resources for setting up the driver. |
+| `api_msgs` | Package defining ROS 2 messages for communication with HD Hyundai Robotics robot. |
+| `hr_ros2_driver` | Contains ROS 2 launch files and configuration parameters for starting the robot driver. |
+| `hr_ros2_launch` | A ROS2 package that interfaces with HD Hyundai Robotics robot. |
 
 ## Installation
 
 Follow the steps below to install and set up the HD Hyundai Robotics ROS2 Driver:
 
-1. **Create a ROS 2 workspace and navigate to the source directory:**
+1. **Git clone package:**
 
    ```bash
    mkdir -p ~/ros2_ws/src
+   cd ~/ros2_ws/src
+   git clone https://github.com/hyundai-robotics/hr_ros2_driver.git
    ```
 
-2. **Move the `install` and `hr_ros2_launch` packages into your workspace:**
+2. **Install dependencies:**
 
    ```bash
-   cd ~/hr_ros2_driver_github
-   mv install ~/ros2_ws
-   mv hr_ros2_launch ~/ros2_ws/src
+   cd ~/ros2_ws/
+   sudo apt update && sudo apt-get install -y curl libboost-all-dev nlohmann-json3-dev
+   sudo apt install -y ros-humble-ros2-control-msgs ros-humble-trajectory-msgs ros-humble-sensor-msgs
+   rosdep install --ignore-src --from-paths src -y
    ```
 
 3. **Build the workspace using `colcon`:**
@@ -119,7 +123,6 @@ The driver publishes the robot's state information:
 
 **Note:** The joint order in both the action goals and joint state messages follows the order specified in the `desired_joint_order` parameter of the launch file.
 
-[나머지 내용 동일...]
 1. **Turn the robot's motor ON:**
 
    ```bash
@@ -157,84 +160,146 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-    # Combined UDP and OpenAPI arguments
+    """Generate ROS 2 launch description with UDP, OpenAPI, and motor configurations"""
+    
+    # Parameter definitions
+    param_configs = {
+        # Network settings
+        'udp_remote_host': ('192.168.1.150', 'UDP remote host IP address'),
+        'udp_remote_port': ('7000', 'UDP remote port'),
+        'udp_local_host': ('0.0.0.0', 'UDP local host'),
+        'udp_local_port': ('7001', 'UDP local port'),
+        
+        # OpenAPI settings
+        'openapi_ip': ('192.168.1.150', 'OpenAPI server IP address'),
+        'openapi_port': ('8888', 'OpenAPI server port'),
+        
+        # Joint and action settings
+        'desired_joint_order': (
+            '["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]',
+            'Desired joint order as JSON-formatted string'),
+        'joint_states_topic': ('joint_states', 'Joint states topic name'),
+        'action_name': (
+            '/arm_controller/follow_joint_trajectory',
+            'Action server name for following joint trajectories'
+        ),
+        
+        # Motor settings
+        'motor_pose_state': ('true', 'Enable/disable motor pose updates'),
+        'motor_pose_interval_ms': ('100', 'Motor position update interval in milliseconds'),
+        'motor_pose_topic': ('/api_agent/joint_position', 'Topic name for motor pose updates'),
+        'pose_param' : ('[0, -1, 0, 0]', '''Default joint position parameters:
+           1) task_no: Task number (0~7)
+              - Not specified: Applied as task 0
+              - >=0: When mechinfo is not specified, current mechinfo of the task is applied
+           2) crd: Coordinate system
+              - Not specified: Get all tcp, axis, encoder values
+              - <0: Follow current recorded coordinate system  
+              - >=0: Specific coordinate system
+           3) ucrd_no: User coordinate system number (only specified when crd is user)
+           4) mechinfo: Mechanism information
+           ''')
+    }
+
+    # Create launch arguments
     launch_arguments = [
         DeclareLaunchArgument(
-            name, default_value=default, description=desc
-        ) for name, default, desc in [
-            ('udp_remote_host', '192.168.1.150', 'UDP remote host IP address'),
-            ('udp_remote_port', '7000', 'UDP remote port'),
-            ('udp_local_host', '0.0.0.0', 'UDP local host'),
-            ('udp_local_port', '7001', 'UDP local port'),
-            ('desired_joint_order', '["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" ]', 'Desired joint order as a JSON-formatted string'),
-            ('joint_states_topic', 'joint_states', 'Joint states topic name'),
-            ('action_name', '/arm_controller/follow_joint_trajectory', 'Name of the action server for following joint trajectories'),
-            ('openapi_ip', '192.168.1.150', 'OpenAPI server IP address'),
-            ('openapi_port', '8888', 'OpenAPI server port')
-        ]
+            name=name,
+            default_value=default,
+            description=desc
+        )
+        for name, (default, desc) in param_configs.items()
     ]
 
+    # Node configuration
     node = Node(
         package='hr_ros2_driver',
         executable='hr_ros2_driver',
         name='hr_ros2_driver',
         output='screen',
         parameters=[{
-            'udp_remote_host': LaunchConfiguration('udp_remote_host'),
-            'udp_remote_port': LaunchConfiguration('udp_remote_port'),
-            'udp_local_host': LaunchConfiguration('udp_local_host'),
-            'udp_local_port': LaunchConfiguration('udp_local_port'),
-            'desired_joint_order': LaunchConfiguration('desired_joint_order'),
-            'joint_states_topic': LaunchConfiguration('joint_states_topic'),
-            'action_name': LaunchConfiguration('action_name'),
-            'openapi_ip': LaunchConfiguration('openapi_ip'),
-            'openapi_port': LaunchConfiguration('openapi_port')
+            param: LaunchConfiguration(param)
+            for param in param_configs.keys()
         }]
     )
 
     return LaunchDescription(launch_arguments + [node])
 ```
 
-### Launch Parameters
+# ROS2 Driver Launch Parameters
 
-#### UDP Communication Parameters:
-* `udp_remote_host`: `'192.168.1.150'` - The IP address of the UDP remote host (robot controller)
-* `udp_remote_port`: `'7000'` - The UDP remote port number on the robot controller
-* `udp_local_host`: `'0.0.0.0'` - The local IP address to bind for UDP communication
-* `udp_local_port`: `'7001'` - The local UDP port number for incoming data
+## Network Parameters
 
-#### Robot Configuration Parameters:
-* `desired_joint_order`: `'["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]'` - A JSON-formatted string specifying the desired order of the robot joints
-* `joint_states_topic`: `'joint_states'` - The name of the ROS 2 topic where joint states are published
-* `action_name`: `'/arm_controller/follow_joint_trajectory'` - The name of the action server used for following joint trajectories
+### UDP Communication Parameters
+* `udp_remote_host` (default: '192.168.1.150')
+  * IP address of the UDP remote host (robot controller)
+  * Target IP for communication with the robot controller
 
-#### OpenAPI Parameters:
-* `openapi_ip`: `'192.168.1.150'` - The IP address of the OpenAPI server
-* `openapi_port`: `'8888'` - The port number for the OpenAPI server
+* `udp_remote_port` (default: '7000')
+  * UDP remote port number on the robot controller
+  * Target port for sending data
 
-**Note:** 
-- All parameters can be overridden when launching the node using command-line arguments
-- Ensure that the IP addresses and ports match your network configuration
-- The OpenAPI server is used for additional robot control and monitoring functionality
-- The default joint order matches the standard configuration of the robot, modify if your setup differs
+* `udp_local_host` (default: '0.0.0.0')
+  * Local IP address for UDP communication
+  * Set to receive from all network interfaces
 
-## Distribution Notice
+* `udp_local_port` (default: '7001')
+  * Local UDP port number for incoming data
+  * Port for receiving data from the robot
 
-### Confidentiality and Distribution Restrictions
+### OpenAPI Parameters
+* `openapi_ip` (default: '192.168.1.150')
+  * IP address of the OpenAPI server
+  * Address of the robot controller's API server
 
-This software driver and all associated documentation are proprietary to HD Hyundai Robotics and are provided for authorized use only. The following restrictions apply:
+* `openapi_port` (default: '8888')
+  * Port number for the OpenAPI server
+  * Port for API communication
 
-1. **Confidentiality**: This software and documentation contain confidential and proprietary information of HD Hyundai Robotics.
+## Robot Configuration Parameters
 
-2. **Distribution Prohibition**: 
-   - Unauthorized distribution, sharing, or transfer of this software is strictly prohibited
-   - Do not upload or share this driver on public repositories or forums
-   - Do not distribute to third parties without explicit written permission from HD Hyundai Robotics
+### Joint Configuration
+* `desired_joint_order` (default: ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint'])
+  * JSON-formatted string specifying the desired order of robot joints
 
-3. **Usage Restrictions**:
-   - For internal use only within authorized organizations
-   - Must be used in accordance with the terms of your license agreement with HD Hyundai Robotics
+* `joint_states_topic` (default: 'joint_states')
+  * ROS 2 topic name where joint states are published
+  * Topic for subscribing to current joint state information
 
-4. **Copyright**: © 2024 HD Hyundai Robotics. All rights reserved.
+### Motion Control Parameters
+* `action_name` (default: '/arm_controller/follow_joint_trajectory')
+  * Action server name for following joint trajectories
+  * Action server for controlling robot movement
 
-Any unauthorized use, reproduction, or distribution of this software may result in legal action. For questions about usage rights or distribution permissions, please contact HD Hyundai Robotics directly.
+### Motor Parameters
+* `motor_pose_state` (default: 'true')
+  * Enable/disable motor pose updates
+  * Controls whether motor position information is updated
+
+* `motor_pose_interval_ms` (default: '100')
+  * Motor position update interval in milliseconds
+  * Sets the frequency of position information updates
+
+* `motor_pose_topic` (default: '/api_agent/joint_position')
+  * Topic name for motor pose updates
+  * Topic where motor position information is published
+
+* `pose_param` (default: [0, -1, 0, 0])
+  * Default joint position parameters
+  * Components:
+    1. task_no: Task number (0~7)
+       - Not specified: Applied as task 0
+       - >=0: Current mechinfo of the task is applied when mechinfo is not specified
+    2. crd: Coordinate system
+       - Not specified: Get all tcp, axis, encoder values
+       - <0: Follow current recorded coordinate system
+       - >=0: Specific coordinate system
+    3. ucrd_no: User coordinate system number (only specified when crd is user)
+    4. mechinfo: Mechanism information
+
+## Usage Notes
+* All parameters can be configured through the launch file or command line arguments
+* Default values are set for standard setup but may need adjustment based on your specific robot configuration
+* Network parameters should match your robot controller's network settings
+* Joint order must match the physical configuration of your robot
+* Update intervals and topic names can be adjusted based on your application's requirements
