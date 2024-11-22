@@ -3,9 +3,9 @@
 <package format="3">
   <name>hr_ros2_driver</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="bluekgssk@gmail.com">hyojun</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Contains ROS 2 launch files and configuration parameters for starting the robot driver.</description>
+  <maintainer email="kwon.hyojun@hd.com">hyojun</maintainer>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
