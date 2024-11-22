@@ -1,0 +1,8 @@
+﻿Hyundai Robot Job File; { version: 1.6, mech_type: "", total_axis: -1, aux_axis: 0 }
+     import enet
+     var pos
+  10 pos=cpo("joint")
+     enet0.send pos.str_array()
+     delay 0.01
+     goto 10
+     end

@@ -1,0 +1,27 @@
+﻿Hyundai Robot Job File; { version: 1.6, mech_type: "", total_axis: -1, aux_axis: 0 }
+     import enet
+     global enet0
+     enet0=enet.ENet()
+     enet0.ip_addr="192.168.1.2" #PC IP
+     enet0.lport=7000
+     enet0.rport=7001
+     enet0.open
+     global onl
+     var msg
+     onl=online.Traject()
+     onl.time_from_start=-1.0 # disable
+     onl.look_ahead_time=1.0 #The time it takes to execute after a value is entered into the online.Traject buffer.
+     onl.interval=0.1 #Online.Traject Movement time from pose accumulated in buffer to next pose
+     onl.init # online trajectory operation init (buffer init)
+     task start,sub=1,job=7001
+  10 enet0.recv
+     msg=result()
+     print msg
+     if msg=="stop"
+       onl.init # online trajectory operation init (buffer init)
+       goto 10
+     else
+       onl.buf_in msg #Put the pose in the ‘po’ variable into the online.Traject buffer.
+     endif
+     goto 10
+     end
