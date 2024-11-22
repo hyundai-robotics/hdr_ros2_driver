@@ -10,10 +10,7 @@
 
 ## Introduction
 
-The HD Hyundai Robotics Robots ROS2 Driver provides a ROS 2 interface for controlling HD Hyundai robots. This driver allows users to integrate HD Hyundai robots into ROS 2 applications, enabling advanced robotic functionalities such as motion planning, perception, and AI integration.
-
-For detailed information, refer to the following documentation:
-[https://hrbook-hrc.web.app/#/view/doc-hr-simulation-gz/english/README](https://hrbook-hrc.web.app/#/view/doc-hr-simulation-gz/english/README)
+The HD Hyundai Robotics ROS 2 Driver provides a ROS 2 interface for controlling HD Hyundai robotic arms. This driver enables users to integrate HD Hyundai robots into ROS 2 applications, facilitating advanced functionalities such as motion planning, perception, and AI integration.
 
 ## System Requirements
 
@@ -56,19 +53,36 @@ Follow the steps below to install and set up the HD Hyundai Robotics ROS2 Driver
    colcon build --symlink-install
    ```
 
-4. **Source the setup script to overlay the workspace on your environment:**
+## Controlling the Robot
+
+### Setup the Teach Pendant (TP)
+
+**Important:** If there are any errors displayed on the Teach Pendant (TP), the robot will not operate. Please ensure that the TP is error-free before proceeding.
+
+Before controlling the robot through ROS 2, follow these steps on the robot controller:
+
+1. Execute program number `7000` on the Teach Pendant (TP).
+2. Change the robot mode to 'auto'.
+3. Motor ON on the Teach Pendant (TP).
+4. Start Program on the Teach Pendant (TP).
+
+### Start the ROS2 Driver
+
+After completing these steps, you can proceed with the following commands to control the robot:
+
+1. **Source the setup script to overlay the workspace on your environment:**
 
    ```bash
    source install/setup.bash
    ```
 
-5. **After connecting to the robot controller via network, launch the ROS 2 driver:**
+2. **After connecting to the robot controller via network, launch the ROS 2 driver:**
 
    ```bash
    ros2 launch hr_ros2_launch ros2_driver.launch.py
    ```
 
-6. **Upload the job files to the controller:**
+3. **Upload the job files to the controller:**
 
    Check the location of the job code in the package and run the following commands:
 
@@ -84,44 +98,8 @@ Follow the steps below to install and set up the HD Hyundai Robotics ROS2 Driver
 
    Alternatively, you can copy the `7000_ethernet.job` and `7001.job` files onto a USB drive, connect it to the Teach Pendant (TP), and paste the files into the `project/jobs` directory. After copying, execute program number `7000` on the TP.
 
-## Control the Robot
 
-**Important:** If there are any errors displayed on the Teach Pendant (TP), the robot will not operate. Please ensure that the TP is error-free before proceeding.
-
-Before controlling the robot through ROS 2, follow these steps on the robot controller:
-
-1. Execute program number `7000` on the Teach Pendant (TP).
-2. Change the robot mode to 'auto'.
-3. Motor ON on the Teach Pendant (TP).
-4. Start Program on the Teach Pendant (TP).
-
-After completing these steps, you can proceed with the following commands to control the robot:
-
-## ROS2 Interface
-
-### Actions
-The driver provides a ROS2 Action interface for trajectory control:
-
-* **Action Server**: `follow_joint_trajectory` (type: `control_msgs::action::FollowJointTrajectory`)
-  - Controls robot motion by following specified joint trajectories
-  - Action name can be configured via the `action_name` parameter in the launch file
-  - Default action name: `/arm_controller/follow_joint_trajectory`
-  - Used for executing motion plans and coordinated joint movements
-
-### Topics
-The driver publishes the robot's state information:
-
-* **Joint States**: `joint_states` (type: `sensor_msgs::msg::JointState`)
-  - Publishes current joint positions, velocities, and efforts
-  - Topic name can be configured via the `joint_states_topic` parameter
-  - Default topic name: `joint_states`
-  - Publishing rate: Real-time updates from the robot controller
-  - Data includes:
-    - Position of each joint in radians
-    - Velocity of each joint in radians/second
-    - Effort (torque) of each joint (if available)
-
-**Note:** The joint order in both the action goals and joint state messages follows the order specified in the `desired_joint_order` parameter of the launch file.
+### Examples
 
 1. **Turn the robot's motor ON:**
 
@@ -148,6 +126,32 @@ The driver publishes the robot's state information:
    ```
 
 **Note:** Ensure that you have completed the necessary setup on the Teach Pendant before sending commands through ROS 2.
+
+## ROS2 Interface
+
+### Actions
+The driver provides a ROS2 Action interface for trajectory control:
+
+* **Action Server**: `follow_joint_trajectory` (type: `control_msgs::action::FollowJointTrajectory`)
+  - Controls robot motion by following specified joint trajectories
+  - Action name can be configured via the `action_name` parameter in the launch file
+  - Default action name: `/arm_controller/follow_joint_trajectory`
+  - Used for executing motion plans and coordinated joint movements
+
+### Topics
+The driver publishes the robot's state information:
+
+* **Joint States**: `joint_states` (type: `sensor_msgs::msg::JointState`)
+  - Publishes current joint positions, velocities, and efforts
+  - Topic name can be configured via the `joint_states_topic` parameter
+  - Default topic name: `joint_states`
+  - Publishing rate: Real-time updates from the robot controller
+  - Data includes:
+    - Position of each joint in radians
+    - Velocity of each joint in radians/second
+    - Effort (torque) of each joint (if available)
+
+**Note:** The joint order in both the action goals and joint state messages follows the order specified in the `desired_joint_order` parameter of the launch file.
 
 ## Launch File Explanation
 
