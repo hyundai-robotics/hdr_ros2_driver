@@ -1,4 +1,0 @@
-string[] cmd_line
----
-string message
-bool  success

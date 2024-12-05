@@ -21,9 +21,9 @@ The HD Hyundai Robotics ROS 2 Driver provides a ROS 2 interface for controlling 
 
 | Package Name | Description |
 |--------------|-------------|
-| `api_msgs` | Package defining ROS 2 messages for communication with HD Hyundai Robotics robot. |
-| `hr_ros2_driver` | Contains ROS 2 launch files and configuration parameters for starting the robot driver. |
-| `hr_ros2_launch` | A ROS2 package that interfaces with HD Hyundai Robotics robot. |
+| `hdr_msgs` | Package defining ROS 2 messages for communication with HD Hyundai Robotics robot. |
+| `hdr_ros2_driver` | Contains ROS 2 launch files and configuration parameters for starting the robot driver. |
+| `hdr_ros2_launch` | A ROS2 package that interfaces with HD Hyundai Robotics robot. |
 
 ## Installation
 
@@ -34,7 +34,7 @@ Follow the steps below to install and set up the HD Hyundai Robotics ROS2 Driver
    ```bash
    mkdir -p ~/ros2_ws/src
    cd ~/ros2_ws/src
-   git clone https://github.com/hyundai-robotics/hr_ros2_driver.git
+   git clone https://github.com/hyundai-robotics/hdr_ros2_driver.git
    ```
 
 2. **Install dependencies:**
@@ -79,7 +79,7 @@ After completing these steps, you can proceed with the following commands to con
 2. **After connecting to the robot controller via network, launch the ROS 2 driver:**
 
    ```bash
-   ros2 launch hr_ros2_launch ros2_driver.launch.py
+   ros2 launch hdr_ros2_launch ros2_driver.launch.py
    ```
 
 3. **Upload the job files to the controller:**
@@ -87,11 +87,11 @@ After completing these steps, you can proceed with the following commands to con
    Check the location of the job code in the package and run the following commands:
 
    ```bash
-   ros2 service call /api_agent/file/post/files api_msgs/srv/FileSend "{target_file: '/project/jobs/7000_ethernet.job', source_file: '/home/<your_username>/hr_ros2_driver_github/7000_ethernet.job'}"
+   ros2 service call /hdr_ros2_driver/file/post/files hdr_msgs/srv/FileSend "{target_file: '/project/jobs/7000_ethernet.job', source_file: '/home/<your_username>/hdr_ros2_driver_github/7000_ethernet.job'}"
    ```
 
    ```bash
-   ros2 service call /api_agent/file/post/files api_msgs/srv/FileSend "{target_file: '/project/jobs/7001.job', source_file: '/home/<your_username>/hr_ros2_driver_github/7001.job'}"
+   ros2 service call /hdr_ros2_driver/file/post/files hdr_msgs/srv/FileSend "{target_file: '/project/jobs/7001.job', source_file: '/home/<your_username>/hdr_ros2_driver_github/7001.job'}"
    ```
 
    **Note:** Replace `<your_username>` with your actual username.
@@ -104,25 +104,25 @@ After completing these steps, you can proceed with the following commands to con
 1. **Turn the robot's motor ON:**
 
    ```bash
-   ros2 service call /api_agent/robot/post/motor_control std_srvs/srv/SetBool "{data: true}"
+   ros2 service call /hdr_ros2_driver/robot/post/motor_control std_srvs/srv/SetBool "{data: true}"
    ```
 
 2. **Start the robot program:**
 
    ```bash
-   ros2 service call /api_agent/robot/post/robot_control std_srvs/srv/SetBool "{data: true}"
+   ros2 service call /hdr_ros2_driver/robot/post/robot_control std_srvs/srv/SetBool "{data: true}"
    ```
 
 3. **Stop the robot program:**
 
    ```bash
-   ros2 service call /api_agent/robot/post/robot_control std_srvs/srv/SetBool "{data: false}"
+   ros2 service call /hdr_ros2_driver/robot/post/robot_control std_srvs/srv/SetBool "{data: false}"
    ```
 
 4. **Turn the robot's motor OFF:**
 
    ```bash
-   ros2 service call /api_agent/robot/post/motor_control std_srvs/srv/SetBool "{data: false}"
+   ros2 service call /hdr_ros2_driver/robot/post/motor_control std_srvs/srv/SetBool "{data: false}"
    ```
 
 **Note:** Ensure that you have completed the necessary setup on the Teach Pendant before sending commands through ROS 2.
@@ -191,7 +191,7 @@ def generate_launch_description():
         # Motor settings
         'motor_pose_state': ('true', 'Enable/disable motor pose updates'),
         'motor_pose_interval_ms': ('100', 'Motor position update interval in milliseconds'),
-        'motor_pose_topic': ('/api_agent/joint_position', 'Topic name for motor pose updates'),
+        'motor_pose_topic': ('~/joint_position', 'Topic name for motor pose updates'),
         'pose_param' : ('[0, -1, 0, 0]', '''Default joint position parameters:
            1) task_no: Task number (0~7)
               - Not specified: Applied as task 0
@@ -217,9 +217,9 @@ def generate_launch_description():
 
     # Node configuration
     node = Node(
-        package='hr_ros2_driver',
-        executable='hr_ros2_driver',
-        name='hr_ros2_driver',
+        package='hdr_ros2_driver',
+        executable='hdr_ros2_driver',
+        name='hdr_ros2_driver',
         output='screen',
         parameters=[{
             param: LaunchConfiguration(param)
@@ -284,7 +284,7 @@ def generate_launch_description():
   * Motor position update interval in milliseconds
   * Sets the frequency of position information updates
 
-* `motor_pose_topic` (default: '/api_agent/joint_position')
+* `motor_pose_topic` (default: '~/joint_position')
   * Topic name for motor pose updates
   * Topic where motor position information is published
 

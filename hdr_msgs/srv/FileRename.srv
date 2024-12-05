@@ -1,0 +1,5 @@
+string pathname_from
+string pathname_to
+---
+string message
+bool  success
