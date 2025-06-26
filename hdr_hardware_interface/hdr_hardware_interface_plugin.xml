@@ -1,0 +1,9 @@
+<library path="hdr_hardware_interface">
+  <class name="hdr_hardware_interface/HDRRobotHardware"
+         type="hdr_hardware_interface::HdrRobotHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware Interface for HDR Robot.
+    </description>
+  </class>
+</library>

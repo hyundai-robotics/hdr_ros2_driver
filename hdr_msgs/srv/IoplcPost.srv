@@ -1,0 +1,6 @@
+string  name
+float32 value
+---
+string message
+int32 val
+bool  success

@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>hdr_hardware_interface</name>
+  <version>1.0.0</version>
+  <description>A ros2_control system interface that seamlessly integrates the HD Hyundai Robotics OpenAPI with the ROS2 control framework.</description>
+  <maintainer email="kwon.hyojun@hd.com">hyojun</maintainer>
+  <maintainer email="vewry12@hd.com">Jeongeun Kim</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+    
+  <depend>ros2_control</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>hdr_ros2_driver</depend>
+  <depend>nlohmann-json-dev</depend>
+
+  <depend>controller_manager</depend>
+  <depend>control_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>controller_manager_msgs</depend>
+
+  <depend>joint_state_broadcaster</depend>
+  <depend>joint_trajectory_controller</depend>
+  <depend>moveit_planners_ompl</depend>
+
+  <depend>xacro</depend>
+  <depend>urdf</depend>
+
+  <depend>rviz2</depend>
+  <depend>rviz_common</depend>
+  <depend>rviz_default_plugins</depend>
+  
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

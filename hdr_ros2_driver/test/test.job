@@ -1,0 +1,6 @@
+﻿Hyundai Robot Job File; { version: 2.0, mech_type: "823(HH8-01)", total_axis: 6, aux_axis: 0 }
+S1   move P,spd=60%,accu=0,tool=1  [0.000,90.000,0.000,0.000,0.000,0.000]
+S2   move P,spd=60%,accu=0,tool=1  [0.000,71.799,20.678,0.000,2.425,-0.001]
+S3   move P,spd=60%,accu=0,tool=1  [0.000,114.659,-19.239,0.000,0.001,0.000]
+S4   move P,spd=60%,accu=0,tool=1  [31.822,103.777,0.000,0.000,0.000,0.000]
+S5   move P,spd=60%,accu=0,tool=1  [-20.854,103.777,0.000,0.000,0.000,0.000]

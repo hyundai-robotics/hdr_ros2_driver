@@ -1,0 +1,6 @@
+string type
+int32 st
+int32 len
+---
+string message
+bool  success

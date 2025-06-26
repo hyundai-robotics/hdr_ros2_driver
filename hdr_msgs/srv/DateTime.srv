@@ -1,0 +1,9 @@
+int32 year
+int32 mon
+int32 day
+int32 hour
+int32 min
+int32 sec
+---
+string message
+bool  success

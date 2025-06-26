@@ -1,0 +1,14 @@
+planning_plugins: pilz_industrial_motion_planner/CommandPlanner
+default_planner_config: PTP
+request_adapters: >-
+  default_planner_request_adapters/ResolveConstraintFrames
+  default_planner_request_adapters/FixStartStateBounds
+  default_planner_request_adapters/FixStartStateCollision
+  default_planner_request_adapters/AddTimeOptimalParameterization
+response_adapters: >-
+  default_planner_response_adapters/ValidateSolution
+  default_planner_response_adapters/DisplayMotionPath
+capabilities: >-
+  pilz_industrial_motion_planner/MoveGroupSequenceAction
+  pilz_industrial_motion_planner/MoveGroupSequenceService
+start_state_max_bounds_error: 0.1
