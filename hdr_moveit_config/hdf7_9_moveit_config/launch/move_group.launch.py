@@ -128,20 +128,9 @@ def launch_setup(context, *args, **kwargs):
     planning_pipeline_config = {
         "default_planning_pipeline": "ompl",
         "planning_pipelines": ["pilz", "ompl"],
-        "pilz": {
-             "planning_plugin": "pilz_industrial_motion_planner/CommandPlanner",
-         },
-         "ompl": {
-             "planning_plugin": "ompl_interface/OMPLPlanner",
-         },
+        "pilz": load_yaml("hdf7_9_moveit_config", "config/pilz_industrial_motion_planner_planning.yaml"),
+        "ompl": load_yaml("hdf7_9_moveit_config", "config/ompl_planning.yaml"),
     }
-    
-    for planner_name, config_yaml in [
-        ("pilz", "config/pilz_industrial_motion_planner_planning.yaml"),
-        ("ompl", "config/ompl_planning.yaml"),
-    ]:
-        planner_yaml = load_yaml("hdf7_9_moveit_config", config_yaml)
-        planning_pipeline_config[planner_name].update(planner_yaml)
 
     moveit_controllers = {
         "moveit_simple_controller_manager": load_yaml("hdf7_9_moveit_config", "config/moveit_controllers.yaml"),

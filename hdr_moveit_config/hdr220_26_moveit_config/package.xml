@@ -3,7 +3,7 @@
   <name>hdr220_26_moveit_config</name>
   <version>1.0.0</version>
   <description>
-    A MoveIt2 configuration package for HD Hyundai Robotics robots on ROS2 Humble, including semantic robot descriptions, planning pipelines, and controller setups.
+    A MoveIt2 configuration package for HD Hyundai Robotics robots on ROS2 Jazzy, including semantic robot descriptions, planning pipelines, and controller setups.
   </description>
   
   <maintainer email="vewry12@hd.com">Jeongeun Kim</maintainer>
@@ -38,3 +38,4 @@
     <build_type>ament_cmake</build_type>
   </export>
 </package>
+
