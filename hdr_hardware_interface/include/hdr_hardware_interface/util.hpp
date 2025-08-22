@@ -26,13 +26,13 @@ namespace util {
 /// <parameter‑name, parameter‑value‑as‑string>
 using ParamMap = std::unordered_map<std::string, std::string>;
 /// Variant that holds strongly‑typed parameter results
-using ParamValue = std::variant<std::string, int, bool>;
+using ParamValue = std::variant<std::string, int, bool, double>;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Constants
 // ──────────────────────────────────────────────────────────────────────────────
 /// Minimum controller *system* firmware version supported by this driver.
-inline constexpr double kMinSupportedSysVer{60.3002};
+inline constexpr double kMinSupportedSysVer{60.3400};
 /// Generic numerical tolerance used across the driver.
 inline constexpr double kEpsilon{1e-4};
 
@@ -95,6 +95,8 @@ inline ParamValue GetParam(const ParamMap& params, const std::string& key,
       return raw;
     } else if (type == "int") {
       return std::stoi(raw);
+    } else if (type == "double") {
+      return std::stod(raw);
     } else if (type == "bool") {
       const std::string val = ToLower(raw);
       if (val == "true" || val == "1")

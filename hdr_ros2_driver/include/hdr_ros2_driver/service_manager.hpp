@@ -41,14 +41,6 @@
 #include "hdr_msgs/srv/program_cnt.hpp"
 #include "hdr_msgs/srv/program_var.hpp"
 
-// Robot pose related
-#include "sensor_msgs/msg/joint_state.hpp"
-
-// Robot trajectory related
-#include "control_msgs/action/follow_joint_trajectory.hpp"
-#include "rclcpp_action/rclcpp_action.hpp"
-#include "trajectory_msgs/msg/joint_trajectory_point.hpp"
-
 /**
  * @brief Contains constants for ROS2 service name strings grouped by domain.
  *
@@ -124,6 +116,7 @@ constexpr auto kPostExecuteMove = "~/task/post/execute_move";
 
 namespace console {
 constexpr auto kPostExecuteCmd = "~/console/post/execute_cmd";
+constexpr auto kPostRemoteOperation = "~/console/post/operation";
 }  // namespace console
 }  // namespace service_names
 
@@ -168,9 +161,12 @@ class ServiceManager {
                                     std::shared_ptr<typename T::Response> response) {
       try {
         (this->*handler)(request, response);
-      } catch (const std::exception& e) {
-        response->success = false;
-        response->message = e.what();
+      } catch (...) {
+        try {
+          response->success = false;
+          response->message = "Service timeout - robot busy";
+        } catch (...) {
+        }
       }
     };
 
@@ -182,23 +178,6 @@ class ServiceManager {
    *
    */
   void SetupAllServices();
-
-  /**
-   * @param robot_pose_topic Topic name for joint state publishing
-   * @param pub_hz Publishing frequency in Hz
-   *
-   * @brief Sets up periodic publishing of robot joint states
-   *
-   */
-  void SetupRobotPosePub(const std::string& robot_pose_topic, int pub_hz);
-
-  /**
-   * @param robot_pose_action Action server name
-   *
-   * @brief Sets up action server for trajectory execution
-   *
-   */
-  void SetupRobotPoseAction(const std::string& robot_pose_action);
 
  protected:
 // Macro to declare handler functions for each service type
@@ -232,7 +211,7 @@ class ServiceManager {
   DECLARE_HANDLER(GetRobotEmergency, std_srvs::srv::Trigger);
   DECLARE_HANDLER(PostRobotToolNo, hdr_msgs::srv::Number);
   DECLARE_HANDLER(PostRobotCrdSys, hdr_msgs::srv::Number);
-  DECLARE_HANDLER(PostRobotMotorPower, std_srvs::srv::SetBool);
+  DECLARE_HANDLER(PostRobotMotorPower, std_srvs::srv::Trigger);
   DECLARE_HANDLER(PostRobotOperation, std_srvs::srv::SetBool);
   DECLARE_HANDLER(GetRobotPoCur, hdr_msgs::srv::PoseCur);
   DECLARE_HANDLER(PostRobotEmergencyStop, std_srvs::srv::Trigger);
@@ -271,29 +250,6 @@ class ServiceManager {
 
 #undef DECLARE_HANDLER
 
-  // Robot pose publisher handler
-  void HandlePublishRobotPose();
-
-  // Robot trajectory action handlers
-  rclcpp_action::GoalResponse HandleRobotPoseActionGoal(
-      const rclcpp_action::GoalUUID& uuid,
-      std::shared_ptr<const control_msgs::action::FollowJointTrajectory::Goal> goal);
-
-  rclcpp_action::CancelResponse HandleRobotPoseActionCancel(
-      const std::shared_ptr<
-          rclcpp_action::ServerGoalHandle<control_msgs::action::FollowJointTrajectory>>
-          goal_handle);
-
-  void HandleRobotPoseActionAccepted(
-      const std::shared_ptr<
-          rclcpp_action::ServerGoalHandle<control_msgs::action::FollowJointTrajectory>>
-          goal_handle);
-
-  void HandleRobotPoseActionExecute(
-      const std::shared_ptr<
-          rclcpp_action::ServerGoalHandle<control_msgs::action::FollowJointTrajectory>>
-          goal_handle);
-
  private:
   // ROS2 node used to register services
   rclcpp::Node* node_;
@@ -302,18 +258,6 @@ class ServiceManager {
 
   // List of registered services
   std::vector<std::shared_ptr<rclcpp::ServiceBase>> services_;
-
-  // Robot pose publishing
-  // Publisher for robot joint states
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr robot_pose_pub_;
-  // Timer for periodic pose publishing
-  rclcpp::TimerBase::SharedPtr robot_pose_timer_;
-  // Current robot joint positions
-  std::vector<double> current_position_;
-
-  // Robot trajectory action server
-  // Action server for trajectory execution
-  rclcpp_action::Server<control_msgs::action::FollowJointTrajectory>::SharedPtr trajectory_action_;
 };
 
 #endif  // HDR_ROS2_DRIVER_SERVICE_MANAGER_HPP_

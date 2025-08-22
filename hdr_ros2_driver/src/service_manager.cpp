@@ -18,44 +18,6 @@ ServiceManager::ServiceManager(rclcpp::Node* node, hdrcl::HdrDriver* driver)
   // Initialize the service manager
   RCLCPP_INFO(node_->get_logger(), "ServiceManager initialized.");
 }
-
-/**
- * @param robot_pose_topic Name of the ROS2 topic for publishing robot joint states
- * @param pub_hz Frequency (Hz) at which to publish the robot pose
- *
- * @brief Sets up a periodic publisher for the robot joint positions.
- */
-void ServiceManager::SetupRobotPosePub(const std::string& robot_pose_topic, int pub_hz) {
-  // Start polling joint positions from the robot controller at the specified frequency
-  driver_->StartPolling(pub_hz);
-
-  // Calculate interval in milliseconds from Hz
-  int chrono_milliseconds = static_cast<int>(1000.0 / pub_hz);
-
-  // Create a publisher for the robot pose
-  robot_pose_pub_ = node_->create_publisher<sensor_msgs::msg::JointState>(robot_pose_topic, 10);
-
-  // Create a timer to publish the robot pose at regular intervals
-  robot_pose_timer_ =
-      node_->create_wall_timer(std::chrono::milliseconds(chrono_milliseconds),
-                               std::bind(&ServiceManager::HandlePublishRobotPose, this));
-}
-
-/**
- * @param robot_pose_action Name of the action server to create for handling robot pose commands
- *
- * @brief Sets up a FollowJointTrajectory action server.
- */
-void ServiceManager::SetupRobotPoseAction(const std::string& robot_pose_action) {
-  // Create an action server for the robot pose action
-  trajectory_action_ = rclcpp_action::create_server<control_msgs::action::FollowJointTrajectory>(
-      node_, robot_pose_action,
-      std::bind(&ServiceManager::HandleRobotPoseActionGoal, this, std::placeholders::_1,
-                std::placeholders::_2),
-      std::bind(&ServiceManager::HandleRobotPoseActionCancel, this, std::placeholders::_1),
-      std::bind(&ServiceManager::HandleRobotPoseActionAccepted, this, std::placeholders::_1));
-}
-
 /**
  * @brief Sets up all ROS2 services and binds them to their respective handler callbacks.
  * Services are grouped by logical modules:
@@ -113,18 +75,18 @@ void ServiceManager::SetupAllServices() {
                                        &ServiceManager::HandleGetRobotEmergency);
   SetupService<hdr_msgs::srv::Number>(service_names::robot::kToolsT,
                                       &ServiceManager::HandleGetRobotToolsT);
-  SetupService<std_srvs::srv::SetBool>(service_names::robot::kMotorPower,
+  SetupService<std_srvs::srv::Trigger>(service_names::robot::kMotorPower,
                                        &ServiceManager::HandlePostRobotMotorPower);
-  // SetupService<std_srvs::srv::SetBool>(service_names::robot::kOperation,
-  //                                      &ServiceManager::HandlePostRobotOperation);
+  SetupService<std_srvs::srv::SetBool>(service_names::robot::kOperation,
+                                       &ServiceManager::HandlePostRobotOperation);
   SetupService<hdr_msgs::srv::Number>(service_names::robot::kToolNo,
                                       &ServiceManager::HandlePostRobotToolNo);
   SetupService<hdr_msgs::srv::Number>(service_names::robot::kCrdSys,
                                       &ServiceManager::HandlePostRobotCrdSys);
   SetupService<std_srvs::srv::Trigger>(service_names::robot::kEmergencyStop,
                                        &ServiceManager::HandlePostRobotEmergencyStop);
-  // SetupService<hdr_msgs::srv::Emergency>(service_names::robot::kEmergencyStopTest,
-  //                                        &ServiceManager::HandlePostRobotEmergencyStopTest);
+  SetupService<hdr_msgs::srv::Emergency>(service_names::robot::kEmergencyStopTest,
+                                         &ServiceManager::HandlePostRobotEmergencyStopTest);
 
   // ------------------ IO PLC Services ------------------
   SetupService<hdr_msgs::srv::IoplcGet>(service_names::io_plc::kGetRelayValue,
@@ -161,8 +123,8 @@ void ServiceManager::SetupAllServices() {
   // ------------------ Task Services ------------------
   // SetupService<hdr_msgs::srv::ProgramCnt>(service_names::task::kPostCurProgCnt,
   //                                         &ServiceManager::HandlePostCurProgCnt);
-  // SetupService<std_srvs::srv::Trigger>(service_names::task::kPostReset,
-  //                                      &ServiceManager::HandlePostReset);
+  SetupService<std_srvs::srv::Trigger>(service_names::task::kPostReset,
+                                       &ServiceManager::HandlePostReset);
   SetupService<hdr_msgs::srv::ProgramVar>(service_names::task::kPostAssignVar,
                                           &ServiceManager::HandlePostAssignVar);
   SetupService<std_srvs::srv::Trigger>(service_names::task::kPostReleaseWait,

@@ -15,40 +15,41 @@ service_type_mapping = {
     "control": [
         ("/hdr_ros2_driver/control/get/op_cnd", "std_srvs/srv/Trigger"),
         ("/hdr_ros2_driver/control/get/ucs_nos", "std_srvs/srv/Trigger"),
-        ("/hdr_ros2_driver/control/get/ios/dio", "hdr_msgs/srv/IoRequest"),
-        ("/hdr_ros2_driver/control/get/ios/sio", "hdr_msgs/srv/IoRequest"),
-        ("/hdr_ros2_driver/control/post/ios/dio", "hdr_msgs/srv/IoRequest"),
-        ("/hdr_ros2_driver/control/put/op_cnd", "hdr_msgs/srv/OpCnd"),
+        ("/hdr_ros2_driver/control/put/op_cnd", "hdr_msgs/srv/OpCnd")
     ],
     "robot": [
         ("/hdr_ros2_driver/robot/get/motor_state", "std_srvs/srv/Trigger"),
+        ("/hdr_ros2_driver/robot/get/po_cur", "hdr_msgs/srv/PoseCur"),
         ("/hdr_ros2_driver/robot/get/cur_tool", "std_srvs/srv/Trigger"),
         ("/hdr_ros2_driver/robot/get/tools", "std_srvs/srv/Trigger"),
         ("/hdr_ros2_driver/robot/get/tools_t", "hdr_msgs/srv/Number"),
+        ("/hdr_ros2_driver/robot/get/emergency", "std_srvs/srv/Trigger"),
+        ("/hdr_ros2_driver/robot/post/motor_power", "std_srvs/srv/Trigger"),
+        ("/hdr_ros2_driver/robot/post/operation", "std_srvs/srv/SetBool"),
         ("/hdr_ros2_driver/robot/post/tool_no", "hdr_msgs/srv/Number"),
         ("/hdr_ros2_driver/robot/post/crd_sys", "hdr_msgs/srv/Number"),
-        ("/hdr_ros2_driver/robot/post/motor_power", "std_srvs/srv/SetBool"),
-        # ("/hdr_ros2_driver/robot/post/operation", "std_srvs/srv/SetBool"),
-        ("/hdr_ros2_driver/robot/get/po_cur", "hdr_msgs/srv/PoseCur"),
         ("/hdr_ros2_driver/robot/post/emergency_stop", "std_srvs/srv/Trigger"),
-        # ("/hdr_ros2_driver/robot/post/emergency_stop_test", "hdr_msgs/srv/Emergency"),
+        ("/hdr_ros2_driver/robot/post/motor_power", "std_srvs/srv/Trigger"),
+        ("/hdr_ros2_driver/robot/post/emergency_stop_test", "hdr_msgs/srv/Emergency")
     ],
     "plc": [
         ("/hdr_ros2_driver/plc/get/relay_value", "hdr_msgs/srv/IoplcGet"),
         ("/hdr_ros2_driver/plc/post/relay_value", "hdr_msgs/srv/IoplcPost"),
+        ("/hdr_ros2_driver/control/get/ios/dio", "hdr_msgs/srv/IoRequest"),  
+        ("/hdr_ros2_driver/control/get/ios/sio", "hdr_msgs/srv/IoRequest"),  
+        ("/hdr_ros2_driver/control/post/ios/dio", "hdr_msgs/srv/IoRequest"),
     ],
     "task": [
-        ("/hdr_ros2_driver/task/post/cur_prog_cnt", "hdr_msgs/srv/ProgramCnt"),
+        ("/hdr_ros2_driver/task/post/reset", "std_srvs/srv/Trigger"),
         ("/hdr_ros2_driver/task/post/set_cur_pc_idx", "hdr_msgs/srv/Number"),
         ("/hdr_ros2_driver/task/post/release_wait", "std_srvs/srv/Trigger"),
-        ("/hdr_ros2_driver/task/post/reset", "std_srvs/srv/Trigger"),
         ("/hdr_ros2_driver/task/post/assign_var", "hdr_msgs/srv/ProgramVar"),
         ("/hdr_ros2_driver/task/post/solve_expr", "hdr_msgs/srv/ProgramVar"),
-        ("/hdr_ros2_driver/robot/post/motor_power", "std_srvs/srv/SetBool"),
+        ("/hdr_ros2_driver/robot/post/motor_power", "std_srvs/srv/Trigger"),
         ("/hdr_ros2_driver/task/post/execute_move", "hdr_msgs/srv/ExecuteMove"),
     ],
     "console": [
-        ("/hdr_ros2_driver/console/post/execute_cmd", "hdr_msgs/srv/ExecuteCmd"),
+        ("/hdr_ros2_driver/console/post/execute_cmd", "hdr_msgs/srv/ExecuteCmd")
     ],
     "file": [
         ("/hdr_ros2_driver/file/post/files", "hdr_msgs/srv/FileSend"),
@@ -70,7 +71,6 @@ service_type_mapping = {
     ],
 }
 
-
 def get_category_services(category: str):
     if category == "all":
         all_services = []
@@ -85,7 +85,7 @@ def fill_request_fields(service_type_str, req, service_name=""):
         if "SetBool" in service_type_str:
             req.data = True
         elif "Number" in service_type_str:
-            req.data = 1
+            req.data = 0
         elif "IoRequest" in service_type_str:
             if "get/ios/dio" in service_name:
                 req.type = "di"
@@ -106,8 +106,8 @@ def fill_request_fields(service_type_str, req, service_name=""):
         elif "PoseCur" in service_type_str:
             req.crd = 0
         elif "Emergency" in service_type_str:
-            req.step_no = 2
-            req.stop_at = 20
+            req.step_no = 1
+            req.stop_at = 50
             req.stop_at_corner = 0
             req.category = 1
         elif "IoplcGet" in service_type_str:

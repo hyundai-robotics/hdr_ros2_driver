@@ -60,6 +60,9 @@ To activate the hardware interface, include it within your URDF or xacro under `
 | `robot_model`             | string | `"ha006b"`                      | Robot model name used in URDF and validation                               |
 | `openapi_ip`              | string | `"192.168.1.150"`               | IP address of robot controller’s HTTP API                                  |
 | `openapi_port`            | int    | `8888`                          | HTTP port used by robot OpenAPI server                                     |
+| `command_port`         | int    | `8000`                          | Port number for trajectory command transmission                              |
+| `command_start_time`   | float  | `-1.0`                          | Start time for command execution (-1.0 for immediate start)             |
+| `command_buffer_size`  | int    | `5`                             | Buffer size for command data management                                 |
 | `use_sim`                 | bool   | `false`                         | Enables simulation mode using the `gz_ros2_control/GazeboSimSystem` plugin, typically for integration with Ignition Gazebo<br>The `use_sim_time` parameter is also set to true to synchronize with simulation time     |
 | `use_mock_hardware`       | bool   | `false`                         | Enables a mock hardware interface using `mock_components/GenericSystem` for testing without a physical robot   |
 | `initial_positions_file`  | string | `""`                            | Optional YAML file specifying initial joint positions                       |
@@ -98,7 +101,8 @@ To activate the hardware interface, include it within your URDF or xacro under `
 - **Controller not found**: Check plugin name in URDF, and rebuild.
 - **Timeout on launch**: Verify that the OpenAPI IP address is reachable from the host machine.
 - **No joint states**: Ensure the driver is running and that the `robot_pose` feature is enabled.
-- **Interface fails to start**: Check for supported firmware version ≥ **60.30-02**.
+- **Interface fails to start**: Check for supported firmware version ≥ **60.34-00**. (This version is planned for release in **October**.)
+
 
 For detailed API documentation, please refer to the [HDR Open API Documentation](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/).
 

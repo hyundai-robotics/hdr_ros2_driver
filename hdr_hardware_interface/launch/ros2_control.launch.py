@@ -43,6 +43,21 @@ def generate_launch_description():
             description="Port number of the robots OpenAPI server.",
         ),
         DeclareLaunchArgument(
+            "command_port",
+            default_value="8000",
+            description="Port number for trajectory command transmission.",
+        ),
+        DeclareLaunchArgument(
+            "command_start_time",
+            default_value="-1.0",
+            description="Start time for command execution (-1.0 for immediate start).",
+        ),
+        DeclareLaunchArgument(
+            "command_buffer_size",
+            default_value="5",
+            description="Buffer size for command data.",
+        ),
+        DeclareLaunchArgument(
             "use_sim",
             default_value="false",
             description="Enable Ignition Gazebo simulation hardware plugin.",
@@ -93,6 +108,9 @@ def launch_setup(context, *args, **kwargs):
     robot_model = LaunchConfiguration("robot_model")
     openapi_ip = LaunchConfiguration("openapi_ip")
     openapi_port = LaunchConfiguration("openapi_port")
+    command_port = LaunchConfiguration("command_port")
+    command_start_time = LaunchConfiguration("command_start_time")
+    command_buffer_size = LaunchConfiguration("command_buffer_size")
     use_sim = LaunchConfiguration("use_sim")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     initial_positions_file = LaunchConfiguration("initial_positions_file")
@@ -104,6 +122,17 @@ def launch_setup(context, *args, **kwargs):
 
     pkg_path = FindPackageShare("hdr_description")
     xacro_path = PathJoinSubstitution([pkg_path, "urdf", "hdr.urdf.xacro"])
+
+    controllers_yaml = load_yaml(
+        controllers_config_package.perform(context),
+        os.path.join("config", controllers_file.perform(context))
+    )
+
+    def get_update_rate(controllers_yaml, default_rate=100):
+        """Retrieve the update_rate value from the controller_manager configuration."""
+        return controllers_yaml.get("controller_manager", {}).get("ros__parameters", {}).get("update_rate", default_rate)
+
+    update_rate = str(get_update_rate(controllers_yaml))
 
     robot_description_content = Command(
         [
@@ -134,6 +163,18 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "openapi_port:=",
             openapi_port,
+            " ",
+            "update_rate:=",
+            update_rate,
+            " ",
+            "command_port:=",
+            command_port,
+            " ",
+            "command_start_time:=",
+            command_start_time,
+            " ",
+            "command_buffer_size:=",
+            command_buffer_size,
         ]
     )
 
@@ -193,10 +234,6 @@ def launch_setup(context, *args, **kwargs):
         condition=UnlessCondition(LaunchConfiguration("use_sim")),
     )
 
-    controllers_yaml = load_yaml(
-        controllers_config_package.perform(context),
-        os.path.join("config", controllers_file.perform(context))
-    )
 
     controllers = controllers_yaml.get("controller_state", {}).get("ros__parameters", {})
     active_controllers = controllers.get("active_controllers", [])

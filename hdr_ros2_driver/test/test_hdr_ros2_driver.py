@@ -67,7 +67,7 @@ def main():
         else:
             node.get_logger().error(f"Service \"{service}\" failed: {result}")
             failure_count += 1
-        time.sleep(0.1)
+        time.sleep(0.5)
 
     node.get_logger().info("Test Summary -------------------------------")
     node.get_logger().info(f"Total Services Tried : {total}")

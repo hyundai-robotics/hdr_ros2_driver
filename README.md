@@ -21,8 +21,11 @@ This repository provides the HD Hyundai Robotics ROS2 driver, including nodes th
 - Hi6-T15
 
 > ❗**Note:** The HD Hyundai Robotics ROS2 driver does **not** support the Hi5a controller.  
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Controller firmware version must be at least **v60.30-02**.  
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The controller software must be updated to version **v60.34-00** or later.
+This version is planned for release in **October**.
 > &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A real-time interface for motion control, state feedback, and I/O operations (with a 2 ms cycle) is scheduled to be released in **September 2025**.
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;All REST API-based communication requires the robot to be in REMOTE mode.
 
 The currently supported robot models are:
 - ha006b [[HA006B](https://hd-hyundairobotics.com/biz/product/detail/7)]
@@ -114,16 +117,37 @@ Upon launch, RViz will open with MoveIt configured for the specified robot.
 ros2 launch hdr_bringup hdr_control.launch.py robot_model:=ha006b
 ```
 
+
+#### Enabling the robot for ROS2 control
+Before issuing any control commands via ROS2, the robot must be **motor powered on** and set to **operation mode**.
+These steps are essential to ensure that the robot is properly initialized and capable of executing commands through **ros2_control**.
+
+In general, when the ROS2 driver is launched, the robot is already in a controllable state.
+However, if the emergency stop has been triggered, the motor power has been turned off, or the system has been restarted, the robot must be re-enabled by following the procedures outlined below:
+
+1. Turn on motor power
+```bash
+ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs/srv/Trigger
+```
+2. Switch robot to operation mode (accept external control commands)
+```bash
+ros2 service call /hdr_ros2_driver/robot/post/operation std_srvs/srv/SetBool "data: true"
+```
+
+
 #### Configuration Options
 The following launch arguments are available in `hdr_control.launch.py` and `hdr_moveit.launch.py`:
 
-| Argument Name              | Type   | Default                  | Description                                                                 |
+| Argument Name              | Type   | Default                   | Description                                                                 |
 |----------------------------|--------|---------------------------|-----------------------------------------------------------------------------|
-| `robot_model`              | string | `ha006b`                 | HDR robot model to use. Choose from `[ha006b, hdf7_9, hdf8_8, hdr50_22, hdr220_26, hh020]` |
-| `openapi_ip`               | string | `192.168.1.150`          | IP address of the robot's OpenAPI server                                  |
-| `openapi_port`             | int    | `8888`                   | Port number for OpenAPI server                                            |
-| `controllers_config_package`| string | `hdr_hardware_interface` | Package providing ROS2 controller configuration files                     |
-| `controllers_file`         | string | `default_controllers.yaml`| YAML file defining controllers to load                                     |
+| `robot_model`              | string | `ha006b`                  | HDR robot model to use. Choose from `[ha006b, hdf7_9, hdf8_8, hdr50_22, hdr220_26, hh020]` |
+| `openapi_ip`               | string | `192.168.1.150`           | IP address of the robot's OpenAPI server                                    |
+| `openapi_port`             | int    | `8888`                    | Port number for OpenAPI server                                              |
+| `command_port`          | int    | `8000`                    | Port number for trajectory command transmission                               |
+| `command_start_time`    | float  | `-1.0`                    | Start time for command execution (-1.0 for immediate start)              |
+| `command_buffer_size`   | int    | `5`                       | Buffer size for command data management                                  |
+| `controllers_config_package`| string | `hdr_hardware_interface` | Package providing ROS2 controller configuration files                       |
+| `controllers_file`         | string | `default_controllers.yaml`| YAML file defining controllers to load                                      |
 | `kinematics_file`          | string | `default_kinematics.yaml`| YAML file specifying the robot's kinematics       
 
 
@@ -180,41 +204,32 @@ default_velocity_scaling_factor: 0.1
 default_acceleration_scaling_factor: 0.1
 ```
 
-### Configuring and Recovering from HDR Robot Power-Saving Mode
-#### Power-Saving Mode Configuration
-Depending on the system settings, the device may automatically enter power-saving mode. To configure or disable this feature on the teach pendant (TP), follow the steps below:
 
-```
-System -> 2. Control Parameters -> 1. Control Environment Settings -> Power-Saving Function
-```
+### Configuring and Recovering from HDR Robot Power Saving Mode
+#### Power Saving Function Configuration
+Depending on the system settings, the device may automatically enter power saving mode. To configure or disable this feature on the teach pendant (TP), follow the steps below:
 
-From this menu, you can enable or disable the power-saving function to suit your operational requirements.
+1. Touch the [2: Control Parameter > 1: Control Environment Setting] menu.
+2. [Power saving function]: You can enable or disable the power saving function to suit your operational requirements.
+<div align="left"><img src=".doc/power_saving.png" alt="HDR moveit" style="width: 60%;"/></div> 
 
-> **Recommendation**: For continuous operation or to avoid unexpected interruptions, consider disabling the power-saving function entirely.
+> **Recommendation**: For continuous operation or to avoid unexpected interruptions, consider disabling the power saving function entirely.
 
-#### Recovery from Power-Saving Mode
+#### Recovery from Power Saving Mode
+If the robot enters power saving mode and becomes unresponsive, you can recover it using one of the following methods:
 
-If the robot enters power-saving mode and becomes unresponsive, you can recover it using one of the following methods:
-
-**Method 1: Motor Power Cycle via ROS2 Service**
-```bash
-# Turn off motor power
-ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs/srv/SetBool "data: false"
-
-# Turn on motor power
-ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs/srv/SetBool "data: true"
-```
-
-**Method 2: Emergency Stop Reset**
 1. Press the emergency stop button on the robot
 2. Release the emergency stop button
-3. Turn on motor power via ROS2 service:
-
+3. Turn on motor power via ROS2 service
 ```bash
-ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs/srv/SetBool "data: true"
+ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs/srv/Trigger
+```
+4. Switch robot to operation mode via ROS2 service (accept external control commands)
+```bash
+ros2 service call /hdr_ros2_driver/robot/post/operation std_srvs/srv/SetBool "data: true"
 ```
 
-> **Note**: If you frequently encounter power-saving mode issues during operation, use the configuration menu above to disable the power-saving function permanently.
+> **Note**: If you frequently encounter power saving mode issues during operation, use the configuration menu above to disable the power saving function permanently.
 
 ---
 
