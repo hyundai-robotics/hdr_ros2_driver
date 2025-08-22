@@ -20,7 +20,7 @@ The `hdr_msgs` package defines the custom ROS2 message types used by the HD Hyun
 |-----------------------|-------------------------------------------------------|
 | `srv/DateTime.srv`    | Get or set the robot controller's system clock. Input includes full date/time fields (year, mon, day, hour, min, sec). |
 | `srv/Emergency.srv`   | Test emergency stop logic with staged parameters (step_no, stop_at, stop_mode). Used for simulation/test scenarios. |
-| `srv/ExecuteCmd.srv`  | Execute console command(s) as a list of string lines. Useful for raw low-level commands like rl.stop. |
+| `srv/ExecuteCmd.srv`  | Execute console command(s) as a list of string lines with configurable interval between executions. Useful for raw low-level commands like rl.stop.  |
 | `srv/ExecuteMove.srv` | Executes a robot movement command using a string-based statement, e.g., "move L,spd=1sec,tool=1 [0, 0, 0, 0, 90, 0]". The task_no identifies the task index (typically 0). |
 | `srv/FileList.srv`    | Query directory contents from the robot. Can filter by including files or directories via booleans. |
 | `srv/FilePath.srv`    | Allows sending or querying file paths for operations such as reading, deleting, or verifying existence. |

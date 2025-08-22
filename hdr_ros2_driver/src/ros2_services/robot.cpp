@@ -188,10 +188,10 @@ void ServiceManager::HandleGetRobotEmergency(
  *
  */
 void ServiceManager::HandlePostRobotMotorPower(
-    const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-    std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
   try {
-    auto [result, success] = driver_->PostRobotMotorPower(request->data);
+    auto [result, success] = driver_->PostRobotMotorPower();
     response->success = success;
     response->message = result.dump();
   } catch (const std::exception& e) {
@@ -218,6 +218,17 @@ void ServiceManager::HandlePostRobotOperation(
     const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
     std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
   try {
+    auto [relay_result, relay_success] = driver_->RelayExternalStopClear();
+    if (!relay_success) {
+      RCLCPP_ERROR(node_->get_logger(), "Failed to clear remote stop state: %s",
+                   relay_result.dump().c_str());
+      response->success = false;
+      response->message = relay_result.dump();
+      return;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
     auto [result, success] = driver_->PostRobotOperation(request->data);
     response->success = success;
     response->message = result.dump();

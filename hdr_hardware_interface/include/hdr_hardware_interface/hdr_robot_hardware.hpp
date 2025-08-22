@@ -1,7 +1,7 @@
 /**
  * @brief Declaration of ::hdr_hardware_interface::HdrRobotHardware.
  * This class is the bridge between the HD Hyundai Robotics controller (accessed
- * via the *HDR Driver* HTTP ) and the ros2_control framework.
+ * via the *HDR Driver* HTTP) and the ros2_control framework.
  * It exposes *position* state/command interfaces for each joint
  * and implements the standard SystemInterface lifecycle callbacks.
  *
@@ -14,9 +14,13 @@
 #ifndef HDR_HARDWARE_INTERFACE_HDR_ROBOT_HARDWARE_HPP_
 #define HDR_HARDWARE_INTERFACE_HDR_ROBOT_HARDWARE_HPP_
 
+#include <atomic>
+#include <chrono>
 #include <controller_manager_msgs/srv/switch_controller.hpp>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "hardware_interface/handle.hpp"
@@ -70,7 +74,6 @@ class HdrRobotHardware final : public hardware_interface::SystemInterface {
   std::vector<double> joint_positions_;        ///< Current joint positions [rad]
   std::vector<double> position_commands_;      ///< Target joint positions  [rad]
   std::vector<double> position_commands_old_;  ///< Previously sent targets
-  int read_counter_ = 0;                       ///< Cycle counter for optimized API calls
 
   // ────────────────────────────────────────────────────────────────────────────
   // Robot state management
@@ -81,17 +84,12 @@ class HdrRobotHardware final : public hardware_interface::SystemInterface {
     REMOTE      ///< cur_mode 3, 4 + is_remote_mode 1
   };
 
-  // Current states
-  int is_remote_mode_ = 0;                    ///< Remote mode flag from robot
-  int cur_mode_ = 0;                          ///< Current mode from robot
+  // Robot state variables (used in read() method for state management)
+  int is_remote_mode_ = 0;                    ///< Remote mode flag from robot (0/1)
+  int cur_mode_ = 0;                          ///< Current mode from robot (0,1,3,4)
+  int is_playback_mode_ = 0;                  ///< Playback state (0=Stopped, 1=Playing)
   RobotMode robot_mode_ = RobotMode::MANUAL;  ///< Processed robot mode
-  int emergency_state_ = 0;                   ///< Emergency stop state (0=off, 1=on)
-  int motor_state_ = 0;                       ///< Motor power state (0=off, 1=on)
-
-  // Previous states for change detection
-  RobotMode prev_mode_ = RobotMode::MANUAL;  ///< Previous robot mode
-  int prev_emergency_state_ = 0;             ///< Previous emergency state
-  int prev_motor_state_ = 0;                 ///< Previous motor state
+  int motor_state_ = 1;                       ///< Motor power state (0=ON, 1=OFF, 2=BUSY)
 
   // ────────────────────────────────────────────────────────────────────────────
   // Controller management
@@ -99,7 +97,7 @@ class HdrRobotHardware final : public hardware_interface::SystemInterface {
   std::shared_ptr<rclcpp::Node> node_for_services_;
   rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr
       switch_controller_client_;
-  bool restarted_controller_ = false;  ///< Flag to prevent duplicate controller restarts
+  bool controller_active_ = false;  ///< Flag indicating if joint_trajectory_controller is active
 
   // ────────────────────────────────────────────────────────────────────────────
   // Driver & controller meta data
@@ -115,11 +113,14 @@ class HdrRobotHardware final : public hardware_interface::SystemInterface {
   bool initialized_ = false;         ///< True after initial position sync
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Configuration parameters (filled during @ref OnConfigure)
+  // Configuration parameters (filled during on_configure)
   // ────────────────────────────────────────────────────────────────────────────
   std::string openapi_ip_ = "192.168.1.150";  ///< Controller IP address
   int openapi_port_ = 8888;                   ///< Controller HTTP port
   std::string robot_model_ = "hdf7_9";        ///< Expected robot model string
+  int command_port_ = 8000;                   ///< UDP port for trajectory streaming
+  double command_start_time_ = -1.0;  ///< Trajectory start time offset [sec] (-1.0 = immediate)
+  int command_buffer_size_ = 5;       ///< Trajectory buffer size for smooth execution
 };
 
 }  // namespace hdr_hardware_interface

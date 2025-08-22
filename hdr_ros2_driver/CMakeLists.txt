@@ -36,7 +36,6 @@ add_executable(hdr_ros2_driver_node
   src/ros2_services/file_manager.cpp
   src/ros2_services/task.cpp
   src/ros2_services/console.cpp
-  src/ros2_services/robot_pose.cpp
 )
 
 ament_target_dependencies(hdr_ros2_driver_node

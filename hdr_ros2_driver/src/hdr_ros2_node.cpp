@@ -26,11 +26,6 @@ HDRROS2Node::HDRROS2Node() : Node("hdr_ros2_driver") {
   this->declare_parameter("openapi_ip", "192.168.1.150");  // Default robot IP address
   this->declare_parameter("openapi_port", 8888);           // Default OpenAPI HTTP port
 
-  this->declare_parameter("robot_pose_enable", false);
-  this->declare_parameter("robot_pose_hz", 100);
-  this->declare_parameter("robot_pose_topic_name", "/hdr_ros2_driver/joint_states");
-  this->declare_parameter("robot_pose_action_name", "/hdr_ros2_driver/follow_joint_trajectory");
-
   try {
     // Initialize HDR driver with parameters from ROS2 parameter server
     driver_ = std::make_unique<hdrcl::HdrDriver>(this->get_parameter("openapi_ip").as_string(),
@@ -39,17 +34,6 @@ HDRROS2Node::HDRROS2Node() : Node("hdr_ros2_driver") {
     // Create service manager and set up all ROS2 services
     service_manager_ = std::make_unique<ServiceManager>(this, driver_.get());
     service_manager_->SetupAllServices();
-
-    if (this->get_parameter("robot_pose_enable").as_bool()) {
-      service_manager_->SetupRobotPosePub(this->get_parameter("robot_pose_topic_name").as_string(),
-                                          this->get_parameter("robot_pose_hz").as_int());
-      service_manager_->SetupRobotPoseAction(
-          this->get_parameter("robot_pose_action_name").as_string());
-
-      RCLCPP_INFO(this->get_logger(), "Robot pose publisher is enabled.");
-    } else {
-      RCLCPP_INFO(this->get_logger(), "Robot pose publisher is disabled.");
-    }
 
     RCLCPP_INFO(this->get_logger(), "Driver initialized successfully");
   } catch (const std::exception& e) {

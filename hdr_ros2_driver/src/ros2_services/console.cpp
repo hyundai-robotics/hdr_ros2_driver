@@ -19,7 +19,7 @@ void ServiceManager::HandlePostExecuteCmd(
     std::shared_ptr<hdr_msgs::srv::ExecuteCmd::Response> response) {
   try {
     // Send the command list to HDR controller via the driver
-    auto [result, success] = driver_->ExecuteCommand(request->cmd_line);
+    auto [result, success] = driver_->ExecuteCommand(request->cmd_line, request->period_ms);
 
     // Set response with execution result
     response->success = success;
