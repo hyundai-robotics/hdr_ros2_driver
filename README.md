@@ -212,7 +212,6 @@ Depending on the system settings, the device may automatically enter power savin
 
 1. Touch the [2: Control Parameter > 1: Control Environment Setting] menu.
 2. [Power saving function]: You can enable or disable the power saving function to suit your operational requirements.
-<div align="left"><img src=".doc/power_saving.png" alt="HDR moveit" style="width: 60%;"/></div> 
 
 > **Recommendation**: For continuous operation or to avoid unexpected interruptions, consider disabling the power saving function entirely.
 
