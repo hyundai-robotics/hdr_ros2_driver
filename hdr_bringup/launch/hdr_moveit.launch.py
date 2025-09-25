@@ -26,7 +26,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "robot_model",
             default_value='ha006b',
-            choices=['ha006b', 'hdf7_9', 'hdf8_8', 'hdr50_22', 'hdr220_26', 'hh020'],
+            choices=[
+                'ha006b', 'hdf7_9', 'hdf8_8', 'hdr10l_19',
+                'hdr20_17', 'hdr50_22', 'hdr220_26', 'hh020'
+            ],
             description="HDR robot model to use.",
         ),
         DeclareLaunchArgument(

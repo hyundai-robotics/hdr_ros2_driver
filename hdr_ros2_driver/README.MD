@@ -2,11 +2,12 @@
 
 #### Table of Contents
 
-- [Overview](#overview)
-- [Package Structure](#package-structure)
-- [Preparation](#preparation)
-- [Usage](#usage)
-- [Troubleshooting](#troubleshooting)
+- [Overview](#1-overview)
+- [Package Structure](#2-package-structure)
+- [Preparation](#3-preparation)
+- [Usage](#4-usage)
+- [Troubleshooting](#5-troubleshooting)
+
 
 ---
 

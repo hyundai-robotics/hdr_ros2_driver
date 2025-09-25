@@ -1,11 +1,11 @@
 # HD Hyundai Robotics ROS2 Driver
 
 #### Table of Contents
-- [Overview](#overview)
-- [Package Structure](#package-structure)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Troubleshooting](#troubleshooting)
+- [Overview](#1-overview)
+- [Repository Structure](#2-repository-structure)
+- [Installation](#3-installation)
+- [Usage](#4-usage)
+- [Troubleshooting](#5-troubleshooting)
 
 ---
 
@@ -20,22 +20,23 @@ This repository provides the HD Hyundai Robotics ROS2 driver, including nodes th
 - Hi6-N80 (HK)
 - Hi6-T15
 
-> ❗**Note:** The HD Hyundai Robotics ROS2 driver does **not** support the Hi5a controller.  
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-The controller software must be updated to version **v60.34-00** or later.
+> ❗**Note:** The HD Hyundai Robotics ROS2 driver does **not** support the Hi5a controller. </br>
+The controller software must be updated to version **v60.34-00** or later. </br>
 This version is planned for release in **October**.
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A real-time interface for motion control, state feedback, and I/O operations (with a 2 ms cycle) is scheduled to be released in **September 2025**.
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;All REST API-based communication requires the robot to be in REMOTE mode.
+A real-time interface for motion control, state feedback, and I/O operations (with a 2 ms cycle) is scheduled to be released in **November 2025**. </br>
+All REST API-based communication requires the robot to be in REMOTE mode.
 
 The currently supported robot models are:
-- ha006b [[HA006B](https://hd-hyundairobotics.com/biz/product/detail/7)]
-- hdf7_9 [[HDF7-9 (HH7)](https://hd-hyundairobotics.com/biz/product/detail/4)]
-- hdf8_8 [[HDF8-8 (HH8)](https://hd-hyundairobotics.com/biz/product/detail/6)]
-- hdr50_22 [[HDR50-22 (HH050)](https://hd-hyundairobotics.com/biz/product/detail/14)]
-- hdr220_26 [[HDR220-26 (HS220)](https://hd-hyundairobotics.com/biz/product/detail/21)]
-- hh020 [[HH020](https://hd-hyundairobotics.com/biz/product/detail/11)]
+- ha006b [[HA006B](https://hd-hyundairobotics.com/en/biz/product/detail/7)]
+- hdf7_9 [[HDF7-9 (HH7)](https://hd-hyundairobotics.com/en/biz/product/detail/4)]
+- hdf8_8 [[HDF8-8 (HH8)](https://hd-hyundairobotics.com/en/biz/product/detail/6)]
+- hdr10l_19 [[HDR10L-19](https://hd-hyundairobotics.com/en/biz/product/detail/84)]
+- hdr20_17 [[HDR20-17 (UH020)](https://hd-hyundairobotics.com/en/biz/product/detail/84)]
+- hdr50_22 [[HDR50-22 (HH050)](https://hd-hyundairobotics.com/en/biz/product/detail/14)]
+- hdr220_26 [[HDR220-26 (HS220)](https://hd-hyundairobotics.com/en/biz/product/detail/21)]
+- hh020 [[HH020](https://hd-hyundairobotics.com/en/biz/product/detail/11)]
 
-> ❗**Note:** The robot models `hdf7_9`, `hdf8_8`, `hdr50_22`, and `hdr220_26` are updated names for the previously known models `HH7`, `HH8`, `HH050`, and `HS220`, respectively.
+> ❗**Note:** The robot models `hdf7_9`, `hdf8_8`, `hdr20_17`, `hdr50_22`, and `hdr220_26` are updated names for the previously known models `HH7`, `HH8`, `UH020`, `HH050`, and `HS220`, respectively.
 
 ---
 
@@ -140,7 +141,7 @@ The following launch arguments are available in `hdr_control.launch.py` and `hdr
 
 | Argument Name              | Type   | Default                   | Description                                                                 |
 |----------------------------|--------|---------------------------|-----------------------------------------------------------------------------|
-| `robot_model`              | string | `ha006b`                  | HDR robot model to use. Choose from `[ha006b, hdf7_9, hdf8_8, hdr50_22, hdr220_26, hh020]` |
+| `robot_model`              | string | `ha006b`                  | HDR robot model to use. Choose from `[ha006b, hdf7_9, hdf8_8, hdr10l_19, hdr20_17, hdr50_22, hdr220_26, hh020]` |
 | `openapi_ip`               | string | `192.168.1.150`           | IP address of the robot's OpenAPI server                                    |
 | `openapi_port`             | int    | `8888`                    | Port number for OpenAPI server                                              |
 | `command_port`          | int    | `8000`                    | Port number for trajectory command transmission                               |
@@ -197,7 +198,7 @@ Configurations such as SRDF, controller settings, and kinematic parameters are d
 
 The `joint_limits.yaml` file located in the `{robot_model}_moveit_config/config` folder defines parameters for specifying scaling factors, which can also be adjusted via the RViz interface.
 Due to current controller limitations, it is strongly recommended to use scaling factor values **no greater than 0.2** for stable operation.
-This issue is planned to be addressed along with the upcoming release of a real-time interface for motion control, scheduled for September 2025.
+This issue is planned to be addressed along with the upcoming release of a real-time interface for motion control, scheduled for November 2025.
 
 ```yaml
 default_velocity_scaling_factor: 0.1
