@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>hdr10l_19_moveit_config</name>
+  <version>1.0.0</version>
+  <description>
+    A MoveIt2 configuration package for HD Hyundai Robotics robots on ROS2 Jazzy, including semantic robot descriptions, planning pipelines, and controller setups.
+  </description>
+  
+  <maintainer email="vewry12@hd.com">Jeongeun Kim</maintainer>
+  <maintainer email="kwon.hyojun@hd.com">hyojun</maintainer>
+  <license>BSD-3-Clause</license>
+  
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  
+  <depend>moveit_common</depend>
+  <depend>moveit_ros_planning</depend>
+  <depend>moveit_ros_move_group</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>moveit_ros_visualization</depend>
+  <depend>moveit_simple_controller_manager</depend>
+  <depend>pilz_industrial_motion_planner</depend>
+  
+  <depend>ros2_control</depend>
+  <depend>controller_manager</depend>
+  <depend>control_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  
+  <depend>xacro</depend>
+  <depend>urdf</depend>
+  <depend>srdfdom</depend>
+  
+  <depend>rviz2</depend>
+  <depend>rviz_common</depend>
+  <depend>rviz_default_plugins</depend>
+  <depend>rviz_ogre_vendor</depend>
+  
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

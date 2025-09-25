@@ -118,6 +118,8 @@ static const std::unordered_map<std::string, std::vector<std::string>> kAllowedM
     {"ha006b", {"ha006b", "HA006B-01"}},
     {"hdf7_9", {"hdf7-9", "HH7-02"}},
     {"hdf8_8", {"hdf8-8", "HH8-01"}},
+    {"hdr10l_19", {"hdr10l_19", "HDR10L-19"}},
+    {"hdr20_17", {"hdr20-17", "HDR20-17"}},
     {"hdr50_22", {"hdr50-22", "HH050-11"}},
     {"hdr220_26", {"hdr220-26", "HS220-01", "HS220-02", "HS220-03"}},
     {"hh020", {"hh020", "HH020-03"}},
