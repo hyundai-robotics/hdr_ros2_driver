@@ -19,6 +19,7 @@
 
 // Robot related
 #include "hdr_msgs/srv/emergency.hpp"
+#include "hdr_msgs/srv/joint_trajectory_points.hpp"
 #include "hdr_msgs/srv/pose_cur.hpp"
 
 // IO PLC related
@@ -80,6 +81,9 @@ constexpr auto kOperation = "~/robot/post/operation";
 constexpr auto kPoCur = "~/robot/get/po_cur";
 constexpr auto kEmergencyStop = "~/robot/post/emergency_stop";
 constexpr auto kEmergencyStopTest = "~/robot/post/emergency_stop_test";
+constexpr auto kJointTrajBuffAvail = "~/robot/get/joint_traj_buff_avail";
+constexpr auto kInitJointTrajectory = "~/robot/post/init_joint_trajectory";
+constexpr auto kInsertJointTrajectoryPoints = "~/robot/post/insert_joint_trajectory_points";
 }  // namespace robot
 
 namespace io_plc {
@@ -216,6 +220,9 @@ class ServiceManager {
   DECLARE_HANDLER(GetRobotPoCur, hdr_msgs::srv::PoseCur);
   DECLARE_HANDLER(PostRobotEmergencyStop, std_srvs::srv::Trigger);
   DECLARE_HANDLER(PostRobotEmergencyStopTest, hdr_msgs::srv::Emergency);
+  DECLARE_HANDLER(GetJointTrajBuffAvail, std_srvs::srv::Trigger);
+  DECLARE_HANDLER(PostInitJointTrajectory, std_srvs::srv::Trigger);
+  DECLARE_HANDLER(PostInsertJointTrajectoryPoints, hdr_msgs::srv::JointTrajectoryPoints);
 
   // IO PLC handlers
   DECLARE_HANDLER(GetRelayValue, hdr_msgs::srv::IoplcGet);

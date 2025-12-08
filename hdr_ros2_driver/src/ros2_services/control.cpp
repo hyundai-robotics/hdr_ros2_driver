@@ -37,7 +37,7 @@ void ServiceManager::HandleGetControlOpCnd(
  * This service retrieves the control I/O digital input values from the robot controller.
  * 🔗 API Reference:
  * [Get /project/control/ios/dio/di_val |
- * do_val](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/4-control/1-get/2-ios-dio)
+ * do_val](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/6-io_plc/1-get/2-ios-dio)
  *
  */
 void ServiceManager::HandleGetControlIosDio(
@@ -74,7 +74,7 @@ void ServiceManager::HandleGetControlIosDio(
  * output), and returns the result in the response message.
  * 🔗 API Reference:
  * [GET /project/control/ios/sio/si_val |
- * so_val](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/korean/4-control/1-get/3-ios-sio)
+ * so_val](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/6-io_plc/1-get/3-ios-sio)
  *
  */
 void ServiceManager::HandleGetControlIosSio(
@@ -129,7 +129,7 @@ void ServiceManager::HandleGetControlUcsNos(
  * This service sets the control I/O digital output values in the robot controller.
  * 🔗 API Reference:
  * [Post Control
- * ios_do](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/4-control/2-post/1-ios-dio)
+ * ios_do](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/6-io_plc/2-post/2-ios-dio)
  *
  */
 void ServiceManager::HandlePostControlIosDio(

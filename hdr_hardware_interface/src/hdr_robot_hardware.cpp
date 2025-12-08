@@ -1,13 +1,15 @@
 /**
  * @brief Implementation of ::hdr_hardware_interface::HDRRobotHardware for
  *        ROS2 control (ros2_control) integration.
+ *
  * This file provides the concrete implementation of the HDRRobotHardware class,
- * which bridges the HD Hyundai Robotics Open API (HTTP) and the
- * ros2_control framework.  The class exposes joint state and command interfaces
+ * which bridges the HD Hyundai Robotics Open API (socket Stream) and the
+ * ros2_control framework. The class exposes joint state and command interfaces
  * and orchestrates driver initialisation, robot activation/de‑activation, and
  * cyclic read/write calls.
+ *
  * Do **NOT** change functional behaviour here unless you also validate the
- * corresponding firmware versions on the real controller.  Minor refactors for
+ * corresponding firmware versions on the real controller. Minor refactors for
  * readability, logging, or documentation are welcome.
  *
  * @file hdr_robot_hardware.cpp
@@ -17,19 +19,32 @@
 
 namespace hdr_hardware_interface {
 
+namespace {
+constexpr double POSITION_EPSILON = 1e-3;
+constexpr double COMMAND_EPSILON = 1e-3;
+constexpr int MAX_POSITION_RETRIES = 3;
+constexpr int STATE_TIMER_PERIOD_MS = 200;
+constexpr int POSITION_RETRY_DELAY_MS = 100;
+constexpr int SERVICE_WAIT_TIMEOUT_MS = 1;
+constexpr int64_t SWITCH_TIMEOUT_NANOSEC = 500000000;
+}  // namespace
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Initialization
+// ══════════════════════════════════════════════════════════════════════════════
+
 /**
- * @param[in] system_info  Hardware description supplied by ros2_control.
+ * @param[in] system_info Hardware description supplied by ros2_control.
  *
- * @return `CallbackReturn::SUCCESS` when ready, otherwise
- *         `CallbackReturn::ERROR`.
+ * @return `CallbackReturn::SUCCESS` when ready, otherwise `CallbackReturn::ERROR`.
  *
  * @brief Validates joint interfaces and allocates internal buffers.
+ *
  * This method is called exactly *once* when the component is first loaded by
  * the controller manager. If the joint interface layout in the URDF/xacro
  * does not match the expected layout (i.e., 'position' interface must exist
  * for both *state* and *command*), the initialization will fail early so the
  * integrator can correct the robot description before run-time.
- *
  */
 hardware_interface::CallbackReturn HdrRobotHardware::on_init(
     const hardware_interface::HardwareInfo& system_info) {
@@ -39,8 +54,17 @@ hardware_interface::CallbackReturn HdrRobotHardware::on_init(
   }
 
   info_ = system_info;
-  size_t num_joints = info_.joints.size();
+  const size_t num_joints = info_.joints.size();
+
+  if (num_joints < 1) {
+    RCLCPP_FATAL(rclcpp::get_logger("HdrRobotHardware"),
+                 "No joints found in the robot description");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
   joint_positions_.resize(num_joints, 0.0);
+  joint_velocities_.resize(num_joints, 0.0);
+  joint_efforts_.resize(num_joints, 0.0);
   position_commands_.resize(num_joints, 0.0);
   position_commands_old_.resize(num_joints, 0.0);
 
@@ -51,9 +75,7 @@ hardware_interface::CallbackReturn HdrRobotHardware::on_init(
   RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
               "Initializing hardware interface with %zu joints", num_joints);
 
-  // Validate every joint entry
-  for (const hardware_interface::ComponentInfo& joint : info_.joints) {
-    // Command interfaces
+  for (const auto& joint : info_.joints) {
     if (joint.command_interfaces.size() != 1 ||
         joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
       RCLCPP_FATAL(rclcpp::get_logger("HdrRobotHardware"),
@@ -61,37 +83,39 @@ hardware_interface::CallbackReturn HdrRobotHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
 
-    // State interfaces
-    if (joint.state_interfaces.size() != 1 ||
-        joint.state_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
-      RCLCPP_FATAL(rclcpp::get_logger("HdrRobotHardware"),
-                   "Joint '%s' must expose POSITION state interfaces", joint.name.c_str());
-      return hardware_interface::CallbackReturn::ERROR;
+    bool has_position = false;
+
+    for (const auto& state_if : joint.state_interfaces) {
+      if (state_if.name == hardware_interface::HW_IF_POSITION) {
+        has_position = true;
+      }
     }
 
-    if (num_joints < 1) {
+    if (!has_position) {
       RCLCPP_FATAL(rclcpp::get_logger("HdrRobotHardware"),
-                   "No joints found in the robot description");
+                   "Joint '%s' does not have POSITION state interface", joint.name.c_str());
       return hardware_interface::CallbackReturn::ERROR;
     }
-
-    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                "HdrRobotHardware initialized with %zu joints.", num_joints);
-    return hardware_interface::CallbackReturn::SUCCESS;
   }
+
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+              "HdrRobotHardware initialized with %zu joints.", num_joints);
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 // Interface exposure
-// ──────────────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
 /**
  * @return A vector of state interfaces.
  *
- * @brief Exports state and command interfaces for the hardware.
- * This method is called when the controller manager loads the hardware
- * interface. It exports the state and command interfaces for each joint.
+ * @brief Exports state interfaces for the hardware.
  *
+ * This method is called when the controller manager loads the hardware
+ * interface. It exports the state interfaces for each joint (position, velocity, effort)
+ * and additional software version metadata as state variables.
  */
 std::vector<hardware_interface::StateInterface> HdrRobotHardware::export_state_interfaces() {
   std::vector<hardware_interface::StateInterface> state_interfaces;
@@ -102,8 +126,12 @@ std::vector<hardware_interface::StateInterface> HdrRobotHardware::export_state_i
 
     state_interfaces.emplace_back(hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joint_positions_[i]));
+    state_interfaces.emplace_back(hardware_interface::StateInterface(
+        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joint_velocities_[i]));
+    state_interfaces.emplace_back(hardware_interface::StateInterface(
+        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &joint_efforts_[i]));
   }
-  // Software version meta data (exposed as additional state variables)
+
   state_interfaces.emplace_back(hardware_interface::StateInterface(
       "get_robot_sw_version", "api_version", &robot_sw_version_api_));
   state_interfaces.emplace_back(hardware_interface::StateInterface(
@@ -111,13 +139,14 @@ std::vector<hardware_interface::StateInterface> HdrRobotHardware::export_state_i
 
   return state_interfaces;
 }
+
 /**
  * @return A vector of command interfaces.
  *
  * @brief Exports command interfaces for the hardware.
+ *
  * This method is called when the controller manager loads the hardware
  * interface. It exports the command interfaces for each joint.
- *
  */
 std::vector<hardware_interface::CommandInterface> HdrRobotHardware::export_command_interfaces() {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
@@ -127,141 +156,57 @@ std::vector<hardware_interface::CommandInterface> HdrRobotHardware::export_comma
   }
   return command_interfaces;
 }
-// ──────────────────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Lifecycle — configuration & activation
-// ──────────────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
 /**
- * @param previous_state The previous state of the hardware interface.
+ * @param[in] previous_state The previous state of the hardware interface.
  *
- * @return CallbackReturn::SUCCESS on success, otherwise an error code.
+ * @return `CallbackReturn::SUCCESS` on success, otherwise an error code.
  *
  * @brief Configures the hardware interface.
- * This method is called when the controller is configured. It initializes
- * the hardware interface and prepares it for operation.
  *
+ * This method is called when the controller is configured. It loads parameters,
+ * initializes the driver, validates firmware versions and robot state, verifies
+ * the robot model, and starts polling.
  */
 hardware_interface::CallbackReturn HdrRobotHardware::on_configure(
-    const rclcpp_lifecycle::State& /*unused*/) {
+    const rclcpp_lifecycle::State& /*previous_state*/) {
   RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "OnConfigure please wait");
 
-  openapi_ip_ = std::get<std::string>(util::GetParam(info_.hardware_parameters, "openapi_ip",
-                                                     std::string("192.168.1.150"), "string"));
-  openapi_port_ =
-      std::get<int>(util::GetParam(info_.hardware_parameters, "openapi_port", 8888, "int"));
-  robot_model_ = std::get<std::string>(
-      util::GetParam(info_.hardware_parameters, "robot_model", std::string("hdf7_9"), "string"));
+  if (!LoadParametersAndInitializeDriver()) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
 
-  command_port_ =
-      std::get<int>(util::GetParam(info_.hardware_parameters, "command_port", 8000, "int"));
+  if (!ValidateRobotStateAndModel()) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
 
-  command_start_time_ = std::get<double>(
-      util::GetParam(info_.hardware_parameters, "command_start_time", -1.0, "double"));
-
-  command_buffer_size_ =
-      std::get<int>(util::GetParam(info_.hardware_parameters, "command_buffer_size", 5, "int"));
-
-  pub_hz_ = std::get<int>(util::GetParam(info_.hardware_parameters, "update_rate", 100, "int"));
+  if (!driver_->DoHandshake(util::kStreamSvrVer, 5000)) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to perform socket Stream handshake");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
 
   RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-              "Loaded parameters: update_rate=%d, start_time=%.3f, command_port=%d, "
-              "buffer_size=%d",
-              pub_hz_, command_start_time_, command_port_, command_buffer_size_);
+              "socket Stream handshake completed successfully");
 
-  std::fill(joint_positions_.begin(), joint_positions_.end(), 0.0);
-
-  try {
-    driver_ = std::make_unique<hdrcl::HdrDriver>(openapi_ip_, openapi_port_, "UDP", command_port_);
-    driver_initialized_ = true;
-
-    // API/System version validation
-    robot_sw_version_api_ = driver_->GetApiVersion();
-    robot_sw_version_sys_ = driver_->GetSysVersion();
-    if (robot_sw_version_sys_ < util::kMinSupportedSysVer) {
-      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                   "Unsupported API version: %.4f. Minimum required version is %.4f",
-                   robot_sw_version_sys_, util::kMinSupportedSysVer);
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    // Robot state validation
-    const auto [state, state_ok] = driver_->GetProjectRgen();
-    if (!state_ok) {
-      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to get robot information");
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    // Remote mode validation
-    int is_remote_mode = state["is_remote_mode"].get<int>();
-    int cur_mode = state["cur_mode"].get<int>();
-    if (!((cur_mode == 3 || cur_mode == 4) && is_remote_mode == 1)) {
-      std::string mode_str = (cur_mode == 0 || cur_mode == 1) ? "MANUAL"
-                             : (cur_mode == 3 || cur_mode == 4)
-                                 ? (is_remote_mode == 1 ? "REMOTE" : "AUTOMATIC")
-                                 : "UNKNOWN";
-      RCLCPP_ERROR(
-          rclcpp::get_logger("HdrRobotHardware"),
-          "Robot is not in remote mode. Current mode: %s (cur_mode: %d, is_remote_mode: %d)",
-          mode_str.c_str(), cur_mode, is_remote_mode);
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    // Robot model validation
-    const std::string actual_model = state["robot_model"].get<std::string>();
-    auto it = util::kAllowedMap.find(robot_model_);
-    bool match = (it != util::kAllowedMap.end())
-                     ? std::any_of(it->second.begin(), it->second.end(),
-                                   [&](const std::string& allowed) {
-                                     return util::CompareIgnoreCase(actual_model, allowed);
-                                   })
-                     : util::CompareIgnoreCase(robot_model_, actual_model);
-
-    if (!match) {
-      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                   "Robot model mismatch (expected %s, got %s)", robot_model_.c_str(),
-                   actual_model.c_str());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                "Robot model verified (%s), API %.2f / SYS %.4f", actual_model.c_str(),
-                robot_sw_version_api_, robot_sw_version_sys_);
-
-    // Start polling
-    if (!driver_->StartPolling(pub_hz_)) {
-      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to start robot polling at %d Hz",
-                   pub_hz_);
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    controller_active_ = true;
-
-    return hardware_interface::CallbackReturn::SUCCESS;
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Configuration failed: %s", e.what());
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-}
-
-/**
- * @param previous_state The previous state of the hardware interface.
- *
- * @return CallbackReturn::SUCCESS on success, otherwise an error code.
- *
- * @brief Activates the hardware interface.
- * This method is called when the controller is activated. It initializes the
- * robot and prepares it for operation.
- *
- */
-hardware_interface::CallbackReturn HdrRobotHardware::on_activate(
-    const rclcpp_lifecycle::State& /*unused*/) {
-  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Activating hardware...");
-
-  if (!driver_ || !driver_initialized_) {
-    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                 "HDR driver is not initialized yet. Activation failed.");
+  if (!driver_->StartPolling(pub_hz_)) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to start robot polling at %d Hz",
+                 pub_hz_);
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  if (!driver_->StartSending()) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to start async send thread");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+              "Async send thread started for non-blocking command transmission");
+
+  // Create service node for controller switching
   node_for_services_ = std::make_shared<rclcpp::Node>("hdr_robot_hw_node",
                                                       rclcpp::NodeOptions()
                                                           .enable_rosout(false)
@@ -272,360 +217,815 @@ hardware_interface::CallbackReturn HdrRobotHardware::on_activate(
       node_for_services_->create_client<controller_manager_msgs::srv::SwitchController>(
           "/controller_manager/switch_controller");
 
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+              "Service node and controller switching client created");
+
+  controller_active_ = true;
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+/**
+ * @return `true` on success, `false` on failure.
+ *
+ * @brief Loads configuration parameters and initializes the driver.
+ *
+ * Retrieves all hardware parameters from the robot description, creates the
+ * driver instance, and validates firmware versions against minimum requirements.
+ */
+bool HdrRobotHardware::LoadParametersAndInitializeDriver() {
+  openapi_ip_ = std::get<std::string>(util::GetParam(info_.hardware_parameters, "openapi_ip",
+                                                     std::string("192.168.1.150"), "string"));
+  robot_model_ = std::get<std::string>(
+      util::GetParam(info_.hardware_parameters, "robot_model", std::string("hdf7_9"), "string"));
+  command_buffer_size_ =
+      std::get<int>(util::GetParam(info_.hardware_parameters, "command_buffer_size", 5, "int"));
+  pub_hz_ = std::get<int>(util::GetParam(info_.hardware_parameters, "update_rate", 100, "int"));
+
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+              "Loaded parameters: openapi_ip=%s, robot_model=%s, update_rate=%d Hz, "
+              "command_buffer_size=%d",
+              openapi_ip_.c_str(), robot_model_.c_str(), pub_hz_, command_buffer_size_);
+
+  std::fill(joint_positions_.begin(), joint_positions_.end(), 0.0);
+  std::fill(joint_velocities_.begin(), joint_velocities_.end(), 0.0);
+  std::fill(joint_efforts_.begin(), joint_efforts_.end(), 0.0);
+
+  try {
+    driver_ = std::make_unique<hdrcl::HdrDriver>(openapi_ip_);
+    driver_initialized_ = true;
+
+    robot_sw_version_api_ = driver_->GetApiVersion();
+    robot_sw_version_sys_ = driver_->GetSysVersion();
+
+    if (robot_sw_version_sys_ < util::kMinSupportedSysVer) {
+      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                   "Unsupported system version: %.4f. Minimum required: %.4f",
+                   robot_sw_version_sys_, util::kMinSupportedSysVer);
+      return false;
+    }
+
+    return true;
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Configuration failed: %s", e.what());
+    return false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Helper functions for robot state management
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @return Pair of (state json object, success flag). First element contains
+ *         the complete robot state as JSON. Second element is true on success,
+ *         false on failure. If failed, returns empty json and false.
+ *
+ * @brief Updates robot state variables from the robot controller.
+ *
+ * Fetches the latest robot state via GetProjectRgen API and updates internal
+ * state variables including is_remote_mode_, cur_mode_, is_playback_mode_,
+ * motor_state_, and robot_mode_. Also returns the full state JSON object
+ * for additional processing.
+ */
+std::pair<nlohmann::json, bool> HdrRobotHardware::UpdateRobotState() {
+  const auto [state, state_ok] = driver_->GetProjectRgen();
+  if (!state_ok) {
+    RCLCPP_DEBUG(rclcpp::get_logger("HdrRobotHardware"),
+                 "GetProjectRgen failed - API call returned error. Response: %s",
+                 state.dump().c_str());
+    return {nlohmann::json{}, false};
+  }
+
+  is_remote_mode_ = state["is_remote_mode"].get<int>();
+  cur_mode_ = state["cur_mode"].get<int>();
+  is_playback_mode_ = state["is_playback"].get<int>();
+  motor_state_ = state["enable_state"].get<int>() & 0x01;
+
+  if (cur_mode_ == 0 || cur_mode_ == 1) {
+    robot_mode_ = RobotMode::MANUAL;
+  } else if (cur_mode_ == 3 || cur_mode_ == 4) {
+    robot_mode_ = (is_remote_mode_ == 1) ? RobotMode::REMOTE : RobotMode::AUTOMATIC;
+  }
+
+  return {state, true};
+}
+
+/**
+ * @return `true` if robot is in REMOTE mode, `false` otherwise.
+ *
+ * @brief Checks if robot is in REMOTE mode.
+ *
+ * Validates that the robot is in REMOTE mode by checking if cur_mode
+ * is 3 or 4 (automatic modes) AND is_remote_mode flag is 1.
+ */
+bool HdrRobotHardware::IsRemoteMode() const {
+  return ((cur_mode_ == 3 || cur_mode_ == 4) && is_remote_mode_ == 1);
+}
+
+/**
+ * @return `true` on success, `false` on failure.
+ *
+ * @brief Validates robot operational state and model configuration.
+ *
+ * Checks that the robot is in REMOTE mode, verifies the robot model matches
+ * the configuration, and ensures the robot is ready for operation.
+ */
+bool HdrRobotHardware::ValidateRobotStateAndModel() {
+  const auto [state, state_ok] = UpdateRobotState();
+  if (!state_ok) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to get robot information");
+    return false;
+  }
+
+  if (!IsRemoteMode()) {
+    std::string mode_str = (cur_mode_ == 0 || cur_mode_ == 1) ? "MANUAL"
+                           : (cur_mode_ == 3 || cur_mode_ == 4)
+                               ? (is_remote_mode_ == 1 ? "REMOTE" : "AUTOMATIC")
+                               : "UNKNOWN";
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                 "Robot is not in remote mode. Current mode: %s (cur_mode: %d, is_remote_mode: %d)",
+                 mode_str.c_str(), cur_mode_, is_remote_mode_);
+    return false;
+  }
+
+  // Validate robot model (using state from UpdateRobotState)
+  const std::string actual_model = state["robot_model"].get<std::string>();
+  auto it = util::kAllowedMap.find(robot_model_);
+  bool match = (it != util::kAllowedMap.end())
+                   ? std::any_of(it->second.begin(), it->second.end(),
+                                 [&](const std::string& allowed) {
+                                   return util::CompareIgnoreCase(actual_model, allowed);
+                                 })
+                   : util::CompareIgnoreCase(robot_model_, actual_model);
+
+  if (!match) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                 "Robot model mismatch (expected %s, got %s)", robot_model_.c_str(),
+                 actual_model.c_str());
+    return false;
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+              "Robot model verified (%s), API %.2f / SYS %.4f", actual_model.c_str(),
+              robot_sw_version_api_, robot_sw_version_sys_);
+
+  return true;
+}
+
+/**
+ * @param[in] previous_state The previous state of the hardware interface.
+ *
+ * @return `CallbackReturn::SUCCESS` on success, otherwise an error code.
+ *
+ * @brief Activates the hardware interface.
+ *
+ * This method is called when the controller is activated. It performs the full
+ * activation sequence: initializes services, powers on the robot motor, clears
+ * safety stops, configures the job program, starts state monitoring, and
+ * synchronizes initial joint data.
+ */
+hardware_interface::CallbackReturn HdrRobotHardware::on_activate(
+    const rclcpp_lifecycle::State& /*previous_state*/) {
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Activating hardware...");
+
+  if (!driver_ || !driver_initialized_) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                 "HDR driver is not initialized yet. Activation failed.");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  if (!InitializeRobotOperation()) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  if (!SetupStateMonitoring()) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  if (!SyncInitialPosition()) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+/**
+ * @return `true` on success, `false` on failure.
+ *
+ * @brief Initializes robot operation with motor power and job program.
+ *
+ * Activates motor power, clears external stops, initializes trajectory buffer,
+ * and configures the job program with command parameters.
+ */
+bool HdrRobotHardware::InitializeRobotOperation() {
   if (!driver_->PostRobotMotorPower().second) {
     RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to activate motor");
-    return hardware_interface::CallbackReturn::ERROR;
+    return false;
   }
 
   if (!driver_->RelayExternalStopClear().second) {
-    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to initialize remote state");
-    return hardware_interface::CallbackReturn::ERROR;
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to clear external stop");
+    return false;
   }
 
-  // Set job program
-  if (!driver_->SetJobProgram(command_port_, command_start_time_, pub_hz_, command_buffer_size_)) {
+  if (!driver_->PostInitJointTrajectory().second) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to initialize joint trajectory");
+    return false;
+  }
+
+  if (!driver_->SetJobProgram(pub_hz_)) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to set job program (hz=%d)",
+                 pub_hz_);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * @return `true` on success, `false` on failure.
+ *
+ * @brief Sets up periodic state monitoring and controller management.
+ *
+ * Starts the executor thread for service callbacks and creates a wall timer
+ * that periodically monitors robot state and manages controller activation/
+ * deactivation based on playback mode, robot mode, and motor state.
+ *
+ * This method is exception-safe and will catch RCL errors that may occur
+ * during shutdown when attempting to add nodes to the executor.
+ */
+bool HdrRobotHardware::SetupStateMonitoring() {
+  try {
+    exec_.add_node(node_for_services_);
+    spin_thread_ = std::thread([this]() { exec_.spin(); });
+
+    state_timer_ = node_for_services_->create_wall_timer(
+        std::chrono::milliseconds(STATE_TIMER_PERIOD_MS), [this] { StateMonitoringCallback(); });
+
+    return true;
+  } catch (const rclcpp::exceptions::RCLError& e) {
     RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                 "Failed to set job program (port=%d, start_time=%.1f, hz=%d, buffer=%d)",
-                 command_port_, command_start_time_, pub_hz_, command_buffer_size_);
-    return hardware_interface::CallbackReturn::ERROR;
+                 "RCL error during state monitoring setup (likely shutdown in progress): %s",
+                 e.what());
+    return false;
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                 "Exception during state monitoring setup: %s", e.what());
+    return false;
+  }
+}
+
+/**
+ * @brief Periodic callback for state monitoring and controller switching.
+ *
+ * Monitors robot state from rgen API and automatically manages controller
+ * activation/deactivation. Activates the joint_trajectory_controller when
+ * all conditions are met (playback active, REMOTE mode, motor on) and
+ * deactivates it when any condition fails.
+ */
+void HdrRobotHardware::StateMonitoringCallback() {
+  const auto [state, state_ok] = UpdateRobotState();
+  if (!state_ok) {
+    RCLCPP_WARN_THROTTLE(
+        rclcpp::get_logger("HdrRobotHardware"), *node_for_services_->get_clock(), 30000,
+        "UpdateRobotState failed - Check robot connection and API status. Response: %s",
+        state.dump().c_str());
+    return;
   }
 
-  // First-time position sync
-  if (first_pass_ && !initialized_) {
-    const int max_position_retries = 3;
-    const std::chrono::milliseconds position_retry_delay(100);
-    bool position_initialized = false;
+  const bool playback_ok = (is_playback_mode_ == 1);
+  const bool mode_ok = (robot_mode_ == RobotMode::REMOTE);
+  const bool motor_ok = (motor_state_ == 0);
+  const bool all_ok = playback_ok && mode_ok && motor_ok;
 
-    for (int attempt = 1; attempt <= max_position_retries; ++attempt) {
-      const auto positions = driver_->GetRobotPosition();
-      if (!positions.empty()) {
-        joint_positions_ = positions;
-        position_commands_ = positions;
-        position_commands_old_ = positions;
+  static bool prev_all_ok = false;
+  static bool first_call = true;
 
-        first_pass_ = false;
-        initialized_ = true;
-        position_initialized = true;
+  if (first_call) {
+    first_call = false;
+    if (all_ok && controller_active_) {
+      prev_all_ok = all_ok;
+      return;
+    }
+  }
 
-        RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                    "First-pass init: command = current robot position (attempt %d/%d).", attempt,
-                    max_position_retries);
-        break;
-      } else {
-        RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
-                    "Initial joint position read failed or empty (attempt %d/%d).", attempt,
-                    max_position_retries);
+  const bool changed = (prev_all_ok != all_ok);
+  prev_all_ok = all_ok;
 
-        if (attempt < max_position_retries) {
-          std::this_thread::sleep_for(position_retry_delay);
-        }
+  if (!changed || switch_in_progress_)
+    return;
+
+  if (!switch_controller_client_ || !switch_controller_client_->wait_for_service(
+                                        std::chrono::milliseconds(SERVICE_WAIT_TIMEOUT_MS))) {
+    RCLCPP_WARN_THROTTLE(rclcpp::get_logger("HdrRobotHardware"), *node_for_services_->get_clock(),
+                         2000, "SwitchController service unavailable");
+    return;
+  }
+
+  auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+  req->strictness = controller_manager_msgs::srv::SwitchController::Request::BEST_EFFORT;
+  req->activate_asap = true;
+  req->timeout.sec = 0;
+  req->timeout.nanosec = SWITCH_TIMEOUT_NANOSEC;
+
+  switch_in_progress_ = true;
+
+  if (!all_ok) {
+    const char* reason = !playback_ok ? "Playback not active"
+                         : !mode_ok   ? "Not in REMOTE mode"
+                                      : "Motor off/busy";
+    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"), "Deactivating controllers: %s", reason);
+    controller_active_ = false;
+    req->deactivate_controllers = {"joint_trajectory_controller"};
+
+    switch_controller_client_->async_send_request(
+        req,
+        [this](
+            rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedFuture future) {
+          (void)future;
+          switch_in_progress_ = false;
+        });
+
+  } else {
+    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Activating controllers: conditions met");
+
+    // Reinitialize trajectory buffer on controller reactivation
+    if (!driver_->PostInitJointTrajectory().second) {
+      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                   "Failed to reinitialize joint trajectory");
+    }
+
+    position_commands_ = joint_positions_;
+    position_commands_old_ = joint_positions_;
+    controller_active_ = true;
+    req->activate_controllers = {"joint_trajectory_controller"};
+
+    switch_controller_client_->async_send_request(
+        req,
+        [this](
+            rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedFuture future) {
+          try {
+            auto res = future.get();
+            if (!res->ok) {
+              RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                          "Controller activation failed; rolling back");
+              controller_active_ = false;
+            }
+          } catch (const std::exception& e) {
+            RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                         "Activation callback exception: %s", e.what());
+            controller_active_ = false;
+          }
+          switch_in_progress_ = false;
+        });
+  }
+}
+
+/**
+ * @return `true` on success, `false` on failure.
+ *
+ * @brief Synchronizes initial joint data with robot.
+ *
+ * Attempts multiple retries to read initial joint data from the robot
+ * and synchronizes all command buffers to prevent sudden movements on activation.
+ */
+bool HdrRobotHardware::SyncInitialPosition() {
+  if (!first_pass_ || initialized_) {
+    return true;
+  }
+
+  for (int attempt = 1; attempt <= MAX_POSITION_RETRIES; ++attempt) {
+    auto joint_data = driver_->GetJointData();
+
+    if (joint_data.IsValid()) {
+      joint_positions_ = joint_data.positions;
+      joint_velocities_ = joint_data.velocities;
+      joint_efforts_ = joint_data.efforts;
+      position_commands_ = joint_data.positions;
+      position_commands_old_ = joint_data.positions;
+
+      first_pass_ = false;
+      initialized_ = true;
+
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+                  "First-pass init: command = current robot position (attempt %d/%d).", attempt,
+                  MAX_POSITION_RETRIES);
+      return true;
+    } else {
+      RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                  "Initial joint data read failed or invalid (attempt %d/%d).", attempt,
+                  MAX_POSITION_RETRIES);
+
+      if (attempt < MAX_POSITION_RETRIES) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(POSITION_RETRY_DELAY_MS));
       }
     }
-
-    if (!position_initialized) {
-      RCLCPP_ERROR(
-          rclcpp::get_logger("HdrRobotHardware"),
-          "Failed to read initial joint positions after %d attempts. Hardware activation failed.",
-          max_position_retries);
-      return hardware_interface::CallbackReturn::ERROR;
-    }
   }
 
-  return hardware_interface::CallbackReturn::SUCCESS;
+  RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+               "Failed to read initial joint data after %d attempts. Hardware activation failed.",
+               MAX_POSITION_RETRIES);
+  return false;
 }
 
 /**
- * @param previous_state The previous state of the hardware interface.
+ * @param[in] level The cleanup level to perform.
  *
- * @return CallbackReturn::SUCCESS on success, otherwise an error code.
+ * @return `true` on success, `false` if any errors occurred (non-fatal).
  *
- * @brief Deactivates the hardware interface.
- * This method is called when the controller is deactivated. It stops the
- * robot and releases any resources.
- *
- */
-hardware_interface::CallbackReturn HdrRobotHardware::on_deactivate(
-    const rclcpp_lifecycle::State& /*unused*/) {
-  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Deactivating hardware...");
-
-  if (!driver_ || !driver_initialized_) {
-    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                 "HDR driver is not initialized yet. Deactivation failed.");
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-
-  auto result = driver_->PostRobotEmergencyStop().second;
-  if (!result) {
-    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to deactivate robot.");
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-
-  driver_->StopPolling();
-
-  return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Cyclic read / write
-// ──────────────────────────────────────────────────────────────────────────────
-/**
- * @param time The current time (currently unused).
- * @param period The time since the last read (currently unused).
- *
- * @return hardware_interface::return_type::OK on success,
- *         hardware_interface::return_type::ERROR on failure.
- *
- * @brief Read joint positions from the robot and update system state.
+ * @brief Common cleanup routine for deactivation, cleanup, and shutdown.
  *
  * @details
- * This function performs the following operations:
- * - Validates driver initialization status
- * - Reads current joint positions from the robot driver
- * - Updates all robot states from rgen API (every 17 cycles)
- * - Manages controller activation/deactivation based on state changes
- * - Handles mode transitions between MANUAL, AUTOMATIC, and REMOTE
- * - Ensures safety during playback mode and motor power transitions
+ * This method performs resource cleanup operations based on the lifecycle
+ * transition being performed:
  *
- * Controller management logic:
- * - All conditions met (playback active, REMOTE mode, motor on): Activates
- * joint_trajectory_controller
- * - Any condition fails: Deactivates joint_trajectory_controller immediately
- * - Playback stopped: Immediately deactivates all controllers
- * - Motor off or busy: Immediately deactivates all controllers
- * - Mode changed from REMOTE: Deactivates joint_trajectory_controller
+ * CleanupLevel::DEACTIVATE (active → inactive):
+ * - Cancel state monitoring timer
+ * - Cancel executor and join spin thread
+ * - Keep polling/sending running for potential reactivation
  *
- * State values:
- * - is_playback_mode_: 0 = Stopped, 1 = Playing
- * - motor_state_: 0 = ON, 1 = OFF, 2 = Busy (extracted from enable_state bit 0)
- * - robot_mode_: Mapped from cur_mode_ and is_remote_mode_
+ * CleanupLevel::CLEANUP (inactive → unconfigured):
+ * - All DEACTIVATE steps
+ * - Stop sending thread
+ * - Stop polling thread
  *
- * The function uses a cyclic counter (0-1699) to optimize API calls. The counter resets at 1700
- * to prevent overflow and maintain proper alignment of the periodic state updates (multiple of 17).
+ * CleanupLevel::SHUTDOWN (any → finalized):
+ * - Emergency stop with motor state verification
+ * - All CLEANUP steps
  *
- * @note This function is called periodically by the ROS2 control framework.
- * @note All robot states are now retrieved from a single rgen API call instead of separate calls.
+ * All operations are exception-safe with detailed logging.
  */
-hardware_interface::return_type HdrRobotHardware::read(const rclcpp::Time& time,
-                                                       const rclcpp::Duration& /*period*/) {
-  // Driver initialization check
+bool HdrRobotHardware::CleanupResources(CleanupLevel level) {
   if (!driver_ || !driver_initialized_) {
-    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"), "Driver not initialized");
-    return hardware_interface::return_type::ERROR;
+    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                "HDR driver is not initialized. Skipping cleanup steps.");
+    return true;
   }
 
-  // Read joint positions
-  auto positions = driver_->GetRobotPosition();
-  if (positions.empty()) {
-    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Failed to read joint positions");
-    return hardware_interface::return_type::ERROR;
-  }
-  joint_positions_ = positions;
+  bool cleanup_success = true;
 
-  // Update robot state every 500ms
-  static rclcpp::Time last_state_update = time;
-  if ((time - last_state_update) >= rclcpp::Duration(std::chrono::milliseconds(500))) {
-    auto [robot_state, ok] = driver_->GetProjectRgen();
-    if (ok) {
-      is_remote_mode_ = robot_state["is_remote_mode"].get<int>();
-      cur_mode_ = robot_state["cur_mode"].get<int>();
-      is_playback_mode_ = robot_state["is_playback"].get<int>();
-      motor_state_ = robot_state["enable_state"].get<int>() & 0x01;
+  // Step 1: Send emergency stop to robot with retry (SHUTDOWN only)
+  if (level == CleanupLevel::SHUTDOWN) {
+    constexpr int max_estop_retries = 3;
+    bool estop_sent = false;
 
-      // Determine robot mode
-      if (cur_mode_ == 0 || cur_mode_ == 1) {
-        robot_mode_ = RobotMode::MANUAL;
-      } else if (cur_mode_ == 3 || cur_mode_ == 4) {
-        robot_mode_ = (is_remote_mode_ == 1) ? RobotMode::REMOTE : RobotMode::AUTOMATIC;
+    try {
+      for (int attempt = 1; attempt <= max_estop_retries; ++attempt) {
+        RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+                    "Sending emergency stop to robot (attempt %d/%d)...", attempt,
+                    max_estop_retries);
+
+        auto [response, result] = driver_->PostRobotEmergencyStop();
+        if (result) {
+          RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Emergency stop sent successfully");
+          estop_sent = true;
+          break;
+        } else {
+          RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                      "Failed to send emergency stop (attempt %d): %s", attempt,
+                      response.dump().c_str());
+          if (attempt < max_estop_retries) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+          }
+        }
       }
-      last_state_update = time;
+
+      if (!estop_sent) {
+        RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                     "Failed to send emergency stop after %d attempts", max_estop_retries);
+        cleanup_success = false;
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Exception during emergency stop: %s",
+                   e.what());
+      cleanup_success = false;
+    }
+
+    // Step 2: Verify motor is actually OFF
+    if (estop_sent) {
+      constexpr int max_verify_retries = 5;
+      bool motor_confirmed_off = false;
+
+      try {
+        RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+                    "Verifying motor state after emergency stop...");
+
+        for (int attempt = 1; attempt <= max_verify_retries; ++attempt) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+          auto [motor_response, motor_ok] = driver_->GetRobotMotorState();
+          if (motor_ok && motor_response.contains("state")) {
+            int motor_state = motor_response["state"].get<int>();
+            // state: 0=ON, 1=OFF, 2=BUSY
+            if (motor_state == 1) {
+              RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+                          "Motor confirmed OFF after %d attempts", attempt);
+              motor_confirmed_off = true;
+              break;
+            } else {
+              RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                          "Motor state is %d (expected 1=OFF), retrying... (attempt %d/%d)",
+                          motor_state, attempt, max_verify_retries);
+            }
+          } else {
+            RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                        "Failed to get motor state, retrying... (attempt %d/%d)", attempt,
+                        max_verify_retries);
+          }
+        }
+
+        if (!motor_confirmed_off) {
+          RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                       "Failed to confirm motor OFF state after %d attempts. "
+                       "Motor may still be running!",
+                       max_verify_retries);
+          cleanup_success = false;
+        }
+      } catch (const std::exception& e) {
+        RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
+                     "Exception during motor state verification: %s", e.what());
+        cleanup_success = false;
+      }
     }
   }
 
-  // Check activation conditions
-  bool playback_ok = (is_playback_mode_ == 1);
-  bool mode_ok = (robot_mode_ == RobotMode::REMOTE);
-  bool motor_ok = (motor_state_ == 0);
-  bool all_conditions_met = playback_ok && mode_ok && motor_ok;
+  // Step 3: Stop sending thread (CLEANUP and SHUTDOWN only)
+  if (level == CleanupLevel::CLEANUP || level == CleanupLevel::SHUTDOWN) {
+    try {
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Stopping sending thread...");
+      driver_->StopSending();
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Sending stopped successfully");
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Exception stopping sending: %s",
+                   e.what());
+      cleanup_success = false;
+    }
 
-  // Track condition changes for controller switching
-  static bool prev_conditions = false;
-  static bool switch_in_progress = false;
-  static rclcpp::Time last_switch_time = time;
-
-  bool conditions_changed = (prev_conditions != all_conditions_met);
-  bool should_activate = !controller_active_ && all_conditions_met && conditions_changed;
-  bool should_deactivate = controller_active_ && !all_conditions_met && conditions_changed;
-
-  // Log condition changes
-  static bool prev_playback = true, prev_mode = true, prev_motor = true;
-  if (prev_playback != playback_ok || prev_mode != mode_ok || prev_motor != motor_ok) {
-    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                "CONDITIONS - Playback:%s, Mode:%s, Motor:%s, Controller:%s",
-                playback_ok ? "OK" : "FAIL", mode_ok ? "OK" : "FAIL", motor_ok ? "OK" : "FAIL",
-                controller_active_ ? "ACTIVE" : "INACTIVE");
-    prev_playback = playback_ok;
-    prev_mode = mode_ok;
-    prev_motor = motor_ok;
+    // Step 4: Stop polling thread
+    try {
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Stopping polling thread...");
+      driver_->StopPolling();
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Polling stopped successfully");
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Exception stopping polling: %s",
+                   e.what());
+      cleanup_success = false;
+    }
   }
 
-  // Reset switch progress flag after timeout
-  if (switch_in_progress &&
-      (time - last_switch_time) >= rclcpp::Duration(std::chrono::milliseconds(200))) {
-    switch_in_progress = false;
+  // Step 5: Cancel and cleanup state monitoring timer
+  try {
+    if (state_timer_) {
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Canceling state monitoring timer...");
+      state_timer_->cancel();
+      state_timer_.reset();
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Timer canceled successfully");
+    }
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Exception canceling timer: %s", e.what());
+    cleanup_success = false;
   }
 
-  // Prevent duplicate requests during switch operation
-  if (switch_in_progress) {
-    prev_conditions = all_conditions_met;
+  // Step 6: Cancel executor
+  try {
+    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Canceling executor...");
+    exec_.cancel();
+    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Executor canceled");
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Exception canceling executor: %s",
+                 e.what());
+    cleanup_success = false;
+  }
+
+  // Step 7: Join spin thread with timeout detection
+  try {
+    if (spin_thread_.joinable()) {
+      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Joining spin thread...");
+      auto start = std::chrono::steady_clock::now();
+      spin_thread_.join();
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - start);
+
+      if (elapsed.count() > 1000) {
+        RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                    "Spin thread took %ld ms to join (expected < 1000ms)", elapsed.count());
+      } else {
+        RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
+                    "Spin thread joined successfully (%ld ms)", elapsed.count());
+      }
+    }
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Exception joining spin thread: %s",
+                 e.what());
+    cleanup_success = false;
+  }
+
+  // Reset controller state
+  controller_active_ = false;
+  switch_in_progress_ = false;
+
+  return cleanup_success;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Lifecycle — deactivation & shutdown
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @param[in] previous_state The previous state of the hardware interface.
+ *
+ * @return `CallbackReturn::SUCCESS` on success, otherwise an error code.
+ *
+ * @brief Deactivates the hardware interface.
+ *
+ * @details
+ * This method is called when the controller is deactivated (active → inactive).
+ * It stops state monitoring (timer/executor) but keeps polling and sending
+ * active to allow for potential reactivation without full reconfiguration.
+ */
+hardware_interface::CallbackReturn HdrRobotHardware::on_deactivate(
+    const rclcpp_lifecycle::State& /*previous_state*/) {
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Deactivating hardware...");
+
+  bool success = CleanupResources(CleanupLevel::DEACTIVATE);
+
+  if (success) {
+    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Hardware deactivated successfully");
+  } else {
+    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                "Hardware deactivated with some errors (see logs above)");
+  }
+
+  return hardware_interface::CallbackReturn::SUCCESS;  // Allow transition even with errors
+}
+
+/**
+ * @param[in] previous_state The previous state of the hardware interface.
+ *
+ * @return `CallbackReturn::SUCCESS` on success, otherwise an error code.
+ *
+ * @brief Cleans up the hardware interface.
+ *
+ * @details
+ * This method is called when the controller is cleaned up (inactive → unconfigured).
+ * It stops polling and sending threads, and cleans up driver resources, allowing
+ * for full reconfiguration if needed.
+ */
+hardware_interface::CallbackReturn HdrRobotHardware::on_cleanup(
+    const rclcpp_lifecycle::State& /*previous_state*/) {
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Cleaning up hardware...");
+
+  bool success = CleanupResources(CleanupLevel::CLEANUP);
+
+  if (success) {
+    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Hardware cleaned up successfully");
+  } else {
+    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                "Hardware cleaned up with some errors (see logs above)");
+  }
+
+  return hardware_interface::CallbackReturn::SUCCESS;  // Allow transition even with errors
+}
+
+/**
+ * @param[in] previous_state The previous state of the hardware interface.
+ *
+ * @return `CallbackReturn::SUCCESS` on success, otherwise an error code.
+ *
+ * @brief Shuts down the hardware interface.
+ *
+ * @details
+ * This method is called when the controller is shut down (any state → finalized).
+ * It performs complete cleanup including emergency stop to ensure safe robot state.
+ */
+hardware_interface::CallbackReturn HdrRobotHardware::on_shutdown(
+    const rclcpp_lifecycle::State& /*previous_state*/) {
+  RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Shutting down hardware...");
+
+  bool success = CleanupResources(CleanupLevel::SHUTDOWN);
+
+  if (success) {
+    RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"), "Hardware shutdown successfully");
+  } else {
+    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"),
+                "Hardware shutdown with some errors (see logs above)");
+  }
+
+  return hardware_interface::CallbackReturn::SUCCESS;  // Allow transition even with errors
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Cyclic read / write
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @param[in] time The current time (currently unused).
+ * @param[in] period The time since the last read (currently unused).
+ *
+ * @return `hardware_interface::return_type::OK` on success,
+ *         `hardware_interface::return_type::ERROR` on failure.
+ *
+ * @brief Read joint data from the robot and update system state.
+ *
+ * Retrieves the latest joint data (positions, velocities, and efforts) from the driver's cache,
+ * which is populated by the polling thread. Updates all joint state interfaces including
+ * position, velocity, and effort data.
+ */
+hardware_interface::return_type HdrRobotHardware::read(const rclcpp::Time& /*time*/,
+                                                       const rclcpp::Duration& /*period*/) {
+  // Fast path: skip all checks if not initialized
+  if (!driver_ || !driver_initialized_) {
     return hardware_interface::return_type::OK;
   }
 
-  // Execute controller switch if needed
-  if (should_activate || should_deactivate) {
-    if (!switch_controller_client_ ||
-        !switch_controller_client_->wait_for_service(std::chrono::milliseconds(100))) {
-      RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"), "Controller service unavailable");
-      prev_conditions = all_conditions_met;
-      return hardware_interface::return_type::OK;
+  auto joint_data = driver_->GetJointData();
+
+  if (joint_data.IsValid()) {
+    // Update positions (assume size is correct for performance)
+    if (joint_data.positions.size() == joint_positions_.size()) {
+      std::copy(joint_data.positions.begin(), joint_data.positions.end(), joint_positions_.begin());
     }
 
-    auto request = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-    request->strictness = controller_manager_msgs::srv::SwitchController::Request::BEST_EFFORT;
-    request->activate_asap = true;
-    request->timeout.sec = 0;
-    request->timeout.nanosec = 500000000;
+    // Update velocities
+    if (joint_data.velocities.size() == joint_velocities_.size()) {
+      std::copy(joint_data.velocities.begin(), joint_data.velocities.end(),
+                joint_velocities_.begin());
+    }
 
-    // Set switch progress flags
-    switch_in_progress = true;
-    last_switch_time = time;
-
-    if (should_deactivate) {
-      const char* reason = !playback_ok ? "Robot not in playback mode"
-                           : !mode_ok   ? "Not in REMOTE mode"
-                                        : "Motor power off or busy";
-
-      RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"), "Deactivating controllers: %s", reason);
-
-      controller_active_ = false;
-      request->deactivate_controllers = {"joint_trajectory_controller"};
-
-      switch_controller_client_->async_send_request(
-          request,
-          [this](
-              rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedFuture future) {
-            try {
-              auto response = future.get();
-              RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                          response->ok ? "Controller deactivated successfully"
-                                       : "Controller deactivation failed");
-            } catch (const std::exception& e) {
-              RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                           "Deactivation callback exception: %s", e.what());
-            }
-          });
-
-    } else if (should_activate) {
-      RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                  "Activating controllers: All conditions met");
-
-      // Sync commands with current positions
-      position_commands_ = joint_positions_;
-      position_commands_old_ = joint_positions_;
-
-      controller_active_ = true;
-      request->activate_controllers = {"joint_trajectory_controller"};
-
-      switch_controller_client_->async_send_request(
-          request,
-          [this](
-              rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedFuture future) {
-            try {
-              auto response = future.get();
-              if (response->ok) {
-                RCLCPP_INFO(rclcpp::get_logger("HdrRobotHardware"),
-                            "Controller activated successfully");
-              } else {
-                RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"), "Controller activation failed");
-                controller_active_ = false;  // Rollback on failure
-              }
-            } catch (const std::exception& e) {
-              RCLCPP_ERROR(rclcpp::get_logger("HdrRobotHardware"),
-                           "Activation callback exception: %s", e.what());
-              controller_active_ = false;  // Rollback on exception
-            }
-          });
+    // Update efforts
+    if (joint_data.efforts.size() == joint_efforts_.size()) {
+      std::copy(joint_data.efforts.begin(), joint_data.efforts.end(), joint_efforts_.begin());
     }
   }
-
-  prev_conditions = all_conditions_met;
   return hardware_interface::return_type::OK;
 }
+
 /**
- * @param time The current time (currently unused).
- * @param period The time since the last write (currently unused).
+ * @param[in] time The current time (currently unused).
+ * @param[in] period The time since the last write (currently unused).
  *
- * @return hardware_interface::return_type::OK on success,
- *         hardware_interface::return_type::ERROR on failure.
+ * @return `hardware_interface::return_type::OK` on success,
+ *         `hardware_interface::return_type::ERROR` on failure.
  *
  * @brief Write joint commands to the robot with intelligent filtering.
  *
- * @details
- * This function implements smart command filtering to reduce unnecessary
- * network traffic to the robot controller:
- *
- * Filtering conditions:
- * - Skips sending if robot is in MANUAL mode
- * - Skips sending if playback is not active
- * - Skips sending if motor is off
- * - Sends only when commands change (reduces traffic after trajectory completion)
+ * Checks the controller_active_ flag set by StateMonitoringCallback to determine
+ * if the robot is in a safe operational state. When safe, implements smart command
+ * filtering to reduce unnecessary network traffic.
  *
  * Constants:
  * - POSITION_EPSILON (1e-3): Threshold for detecting robot movement
  * - COMMAND_EPSILON (1e-3): Threshold for detecting command changes
  *
- * @note Only sends commands in REMOTE mode when playback is active and motor is on.
- *       Eliminates redundant transmissions after trajectory completion.
+ * Look-ahead time calculation:
+ * - look_ahead_time = (1/hz) * buffer_size (in seconds)
+ * - Example: at 100Hz with buffer_size=5 → 0.01 * 5 = 0.05 seconds
  */
-hardware_interface::return_type HdrRobotHardware::write(const rclcpp::Time& /*unused*/,
-                                                        const rclcpp::Duration& /*unused*/) {
-  constexpr double POSITION_EPSILON = 1e-3;
-  constexpr double COMMAND_EPSILON = 1e-3;
-
+hardware_interface::return_type HdrRobotHardware::write(const rclcpp::Time& /*time*/,
+                                                        const rclcpp::Duration& /*period*/) {
+  // Fast path: skip if not initialized
   if (!driver_ || !driver_initialized_) {
-    RCLCPP_WARN(rclcpp::get_logger("HdrRobotHardware"), "Driver not initialized — skipping write");
     return hardware_interface::return_type::ERROR;
   }
 
-  if (robot_mode_ == RobotMode::MANUAL) {
+  // Check controller_active_ flag set by StateMonitoringCallback
+  // This flag reflects: playback active, REMOTE mode, and motor ON
+  if (!controller_active_) {
     position_commands_ = joint_positions_;
     position_commands_old_ = joint_positions_;
     return hardware_interface::return_type::OK;
   }
 
-  if (robot_mode_ == RobotMode::REMOTE && is_playback_mode_ == 1 && motor_state_ == 0) {
+  // Robot is in safe operational state - send commands
+  {
+    // Combined loop: check both is_moving and is_same_command in one pass
     bool is_moving = false;
+    bool is_same_command = true;
+
     for (size_t i = 0; i < position_commands_.size(); ++i) {
       if (std::abs(position_commands_[i] - joint_positions_[i]) > POSITION_EPSILON) {
         is_moving = true;
-        break;
       }
-    }
-
-    bool is_same_command = true;
-    for (size_t i = 0; i < position_commands_.size(); ++i) {
       if (std::abs(position_commands_[i] - position_commands_old_[i]) > COMMAND_EPSILON) {
         is_same_command = false;
+      }
+      // Early exit if both conditions met
+      if (is_moving && !is_same_command) {
         break;
       }
     }
 
+    // Skip sending if robot not moving and command unchanged
     if (!is_moving && is_same_command) {
       return hardware_interface::return_type::OK;
     }
 
-    if (!driver_->SetRobotPosition(position_commands_)) {
-      return hardware_interface::return_type::ERROR;
-    }
+    // Calculate look_ahead_time: (1/hz) * buffer_size
+    double look_ahead_time = (1.0 / static_cast<double>(pub_hz_)) * command_buffer_size_;
+
+    // Async send (queued, non-blocking)
+    driver_->SetRobotPosition(position_commands_, pub_hz_, look_ahead_time);
 
     position_commands_old_ = position_commands_;
   }

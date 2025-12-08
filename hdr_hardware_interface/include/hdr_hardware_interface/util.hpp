@@ -32,7 +32,20 @@ using ParamValue = std::variant<std::string, int, bool, double>;
 // Constants
 // ──────────────────────────────────────────────────────────────────────────────
 /// Minimum controller *system* firmware version supported by this driver.
-inline constexpr double kMinSupportedSysVer{60.3400};
+inline constexpr double kMinSupportedSysVer{60.3200};
+/**
+ * @brief socket Stream protocol version for handshake negotiation.
+ *
+ * @details
+ * This version string follows Semantic Versioning (major.minor.patch):
+ * - Major: Breaking changes (incompatible with different major versions)
+ * - Minor: New features (backward compatible)
+ * - Patch: Bug fixes (backward compatible)
+ *
+ * Used in DoHandshake() to verify protocol compatibility between client and server.
+ * Only major version must match; minor/patch differences are acceptable.
+ */
+inline constexpr const char* kStreamSvrVer = "1.0.0";
 /// Generic numerical tolerance used across the driver.
 inline constexpr double kEpsilon{1e-4};
 
@@ -68,18 +81,26 @@ inline constexpr double kEpsilon{1e-4};
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * @param[in] params       Map of <key, value‑as‑string> pairs.
- * @param[in] key          Parameter name to look up.
- * @param[in] default_val  Fallback value when parsing fails or key is missing.
- * @param[in] type_hint    Expected type: "string", "int", or "bool" (case‑insensitive).
- *
- * @return Parsed value wrapped in @ref ParamValue.
- *
- * @brief Retrieves and converts a parameter from a string map.
- * The function looks up @p key in the provided map.  If absent or if conversion
- * fails, @p default_val is returned and a warning is written to *stderr*.
- *
- */
+  * @param[in] params       Map of <key, value‑as‑string> pairs.
+  * @param[in] key          Parameter name to look up.
+  * @param[in] default_val  Fallback value when parsing fails or key is
+ missing.
+  * @param[in] type_hint    Expected type: "string", "int", or "bool"
+ (case‑insensitive).
+  *
+  * @return Parsed value wrapped in @ref ParamValue.
+  *
+  * @brief Retrieves and converts a parameter from a string map.
+  *
+  * @throws std::runtime_error if type conversion fails   // ← 추가 필요
+  *
+  * @example
+  * @code
+  * ParamMap params = {{"speed", "100"}, {"enabled", "true"}};
+  * auto speed = GetParam(params, "speed", 50, "int");
+  * auto enabled = GetParam(params, "enabled", false, "bool");
+  * @endcode
+  */
 inline ParamValue GetParam(const ParamMap& params, const std::string& key,
                            const ParamValue& default_val, const std::string& type_hint) {
   const auto it = params.find(key);
@@ -123,6 +144,7 @@ static const std::unordered_map<std::string, std::vector<std::string>> kAllowedM
     {"hdr50_22", {"hdr50-22", "HH050-11"}},
     {"hdr220_26", {"hdr220-26", "HS220-01", "HS220-02", "HS220-03"}},
     {"hh020", {"hh020", "HH020-03"}},
+    {"hdr35_20", {"hdr35-20", "UH035"}}
 };
 
 }  // namespace util

@@ -2,17 +2,17 @@
 
 #### Table of Contents
 
-- [Overview](#1-overview)
-- [Package Structure](#2-package-structure)
-- [Preparation](#3-preparation)
-- [Usage](#4-usage)
-- [Troubleshooting](#5-troubleshooting)
+- [Overview](#overview)
+- [Package Structure](#package-structure)
+- [Preparation](#preparation)
+- [Usage](#usage)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
 ## 1. Overview
 
-The `hdr_ros2_driver` package provides a ROS2 driver for interfacing with HD Hyundai Robotics' Open API. This driver enables communication with the robot controller via a HTTP-based Open API, and supports services including retrieving robot status, controlling the robot, and managing file operations.
+The `hdr_ros2_driver` package provides a ROS2 service node for interfacing with HD Hyundai Robotics' Open API. This node enables communication with the robot controller via HTTP-based RESTful API, exposing various robot control and monitoring functions as ROS2 services. For joint state streaming and trajectory control, use this package together with `hdr_hardware_interface` (ros2_control).
 
 ---
 
@@ -23,7 +23,7 @@ The `hdr_ros2_driver` package provides a ROS2 driver for interfacing with HD Hyu
 | `launch/`           | Launch files for starting the driver node.     |
 | `src/`              | Source code of the ROS2 driver implementation. |
 | `include/`          | Header files for the driver.                   |
-| `test/`             | Scripts for service and trajectory testing.    |
+| `test/`             | Scripts for service testing.                   |
 
 ---
 
@@ -97,28 +97,20 @@ Once switched, confirm that the status bar on the teach pendant screen displays 
 Make sure this step is complete before proceeding.
 
 #### Launching the Driver
-You can now launch the ROS2 driver using the following commands:
+You can now launch the ROS2 service node using the following commands:
 ```bash
 # Launch with default parameters
-ros2 launch hdr_ros2_driver hdr_ros2_driver_launch.py
+ros2 launch hdr_ros2_driver hdr_ros2_driver.launch.py
 
-# Launch with custom IP and port for the OpenAPI server
-ros2 launch hdr_ros2_driver hdr_ros2_driver_launch.py \
-  openapi_ip:=192.168.0.10 \
-  openapi_port:=8080
+# Launch with custom IP for the OpenAPI server
+ros2 launch hdr_ros2_driver hdr_ros2_driver.launch.py \
+  openapi_ip:=192.168.0.10
 ```
 <div align="left"><img src="../.doc/tp_button.png" alt="ip setup" style="width: 60%;"/></div>
 If everything is configured correctly:
 
 - The Motor ON button (green LED) will blink, indicating that power is being enabled.
 - The START button (white LED) will turn on, showing that the system is ready for operation.
-
-#### Configuration Options
-
-| Argument name           | Type     | Default                          | Description                                      |
-|-------------------------|----------|----------------------------------|--------------------------------------------------|
-| `openapi_ip`            | string | `192.168.1.150`                  | IP address of robot's OpenAPI server             |
-| `openapi_port`          | int    | `8888`                           | Port number for OpenAPI server                   |
 
 ### Topics
 
@@ -140,8 +132,8 @@ The driver provides the following service categories:
 
 | Service Name | Service Type | Description | Usage |
 |--------------|--------------|-------------|-------|
-| `/hdr_ros2_driver/get/api_ver` | std_srvs::srv::Trigger | Get the API version | `ros2 service call /hdr_ros2_driver/get/api_ver std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/get/system_ver` | std_srvs::srv::Trigger | Get the system version | `ros2 service call /hdr_ros2_driver/get/system_ver std_srvs::srv::Trigger` |
+| `/hdr_ros2_driver/get/api_ver` | std_srvs::srv::Trigger | Get the API version | `ros2 service call /hdr_ros2_driver/get/api_ver std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/get/system_ver` | std_srvs::srv::Trigger | Get the system version | `ros2 service call /hdr_ros2_driver/get/system_ver std_srvs/srv/Trigger` |
 
 #### Project Management
 
@@ -164,65 +156,77 @@ The driver provides the following service categories:
 
 | Service Name | Service Type | Description | Usage |
 |--------------|--------------|-------------|-------|
-| `/hdr_ros2_driver/robot/get/motor_state` | std_srvs::srv::Trigger | Get the current motor state | `ros2 service call /hdr_ros2_driver/robot/get/motor_state std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/robot/get/po_cur` | hdr_msgs::srv::PoseCur | Get current position | `ros2 service call /hdr_ros2_driver/robot/get/po_cur hdr_msgs::srv::PoseCur` |
-| `/hdr_ros2_driver/robot/get/cur_tool` | std_srvs::srv::Trigger | Get the current tool information | `ros2 service call /hdr_ros2_driver/robot/get/cur_tool std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/robot/get/tools` | std_srvs::srv::Trigger | Get a list of available tools | `ros2 service call /hdr_ros2_driver/robot/get/tools std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/robot/get/tools_t` | hdr_msgs::srv::Number | Get tool information with transformation data | `ros2 service call /hdr_ros2_driver/robot/get/tools_t hdr_msgs::srv::Number "{data: 0}"` |
-| `/hdr_ros2_driver/robot/get/emergency` | std_srvs::srv::Trigger | Get emergency stop status | `ros2 service call /hdr_ros2_driver/robot/get/emergency std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/robot/post/motor_power` | std_srvs::srv::Trigger | Turn motor power on/off | `ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/robot/post/operation` | std_srvs::srv::SetBool | Control robot job execution (start/stop) | `ros2 service call /hdr_ros2_driver/robot/post/operation std_srvs::srv::SetBool "{data: true}"` |
-| `/hdr_ros2_driver/robot/post/tool_no` | hdr_msgs::srv::Number | Set the current tool number | `ros2 service call /hdr_ros2_driver/robot/post/tool_no hdr_msgs::srv::Number "{data: 0}"` |
-| `/hdr_ros2_driver/robot/post/crd_sys` | hdr_msgs::srv::Number | Set coordinate system | `ros2 service call /hdr_ros2_driver/robot/post/crd_sys hdr_msgs::srv::Number "{data: 0}"` |
-| `/hdr_ros2_driver/robot/post/emergency_stop` | std_srvs::srv::Trigger | Trigger emergency stop | `ros2 service call /hdr_ros2_driver/robot/post/emergency_stop std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/robot/post/emergency_stop_test` | hdr_msgs::srv::Emergency | Execute emergency stop test | `ros2 service call /hdr_ros2_driver/robot/post/emergency_stop_test hdr_msgs::srv::Emergency "{step_no: 1, stop_at: 50, stop_at_corner: 0, category: 1}"` |
+| `/hdr_ros2_driver/robot/get/motor_state` | std_srvs::srv::Trigger | Get the current motor state | `ros2 service call /hdr_ros2_driver/robot/get/motor_state std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/get/po_cur` | hdr_msgs::srv::PoseCur | Get current position | `ros2 service call /hdr_ros2_driver/robot/get/po_cur hdr_msgs/srv/PoseCur "{task_no: 0, crd: 0, ucrd_no: 0, mechinfo: false}"` |
+| `/hdr_ros2_driver/robot/get/cur_tool` | std_srvs::srv::Trigger | Get the current tool information | `ros2 service call /hdr_ros2_driver/robot/get/cur_tool std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/get/tools` | std_srvs::srv::Trigger | Get a list of available tools | `ros2 service call /hdr_ros2_driver/robot/get/tools std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/get/tools_t` | hdr_msgs::srv::Number | Get tool information with transformation data | `ros2 service call /hdr_ros2_driver/robot/get/tools_t hdr_msgs/srv/Number "{data: 0}"` |
+| `/hdr_ros2_driver/robot/get/emergency` | std_srvs::srv::Trigger | Get emergency stop status | `ros2 service call /hdr_ros2_driver/robot/get/emergency std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/post/motor_power` | std_srvs::srv::Trigger | Turn motor power on/off | `ros2 service call /hdr_ros2_driver/robot/post/motor_power std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/post/operation` | std_srvs::srv::SetBool | Control robot job execution (start/stop) | `ros2 service call /hdr_ros2_driver/robot/post/operation std_srvs/srv/SetBool "{data: true}"` |
+| `/hdr_ros2_driver/robot/post/tool_no` | hdr_msgs::srv::Number | Set the current tool number | `ros2 service call /hdr_ros2_driver/robot/post/tool_no hdr_msgs/srv/Number "{data: 0}"` |
+| `/hdr_ros2_driver/robot/post/crd_sys` | hdr_msgs::srv::Number | Set coordinate system | `ros2 service call /hdr_ros2_driver/robot/post/crd_sys hdr_msgs/srv/Number "{data: 0}"` |
+| `/hdr_ros2_driver/robot/post/emergency_stop` | std_srvs::srv::Trigger | Trigger emergency stop | `ros2 service call /hdr_ros2_driver/robot/post/emergency_stop std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/post/emergency_stop_test` | hdr_msgs::srv::Emergency | Execute emergency stop test | `ros2 service call /hdr_ros2_driver/robot/post/emergency_stop_test hdr_msgs/srv/Emergency "{step_no: 1, stop_at: 50, stop_at_corner: 0, category: 1}"` |
+| `/hdr_ros2_driver/robot/get/joint_traj_buff_avail`| std_srvs::srv::Trigger | Get available size of joint trajectory buffer | `ros2 service call /hdr_ros2_driver/robot/get/joint_traj_buff_avail std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/post/init_joint_trajectory` | std_srvs::srv::Trigger | Initialize (clear) the joint trajectory buffer | `ros2 service call /hdr_ros2_driver/robot/post/init_joint_trajectory std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/robot/post/insert_joint_trajectory_points` | hdr_msgs::srv::JointTrajectoryPoints | Insert joint trajectory points into controller buffer | `ros2 service call /hdr_ros2_driver/robot/post/insert_joint_trajectory_points hdr_msgs/srv/JointTrajectoryPoints "{ trajectory: { joint_names: ['j1','j2','j3','j4','j5','j6'], points: [ { positions: [0.0,1.5708,0,0,0,0], time_from_start: {sec: 0, nanosec: 0}}, { positions: [0.05,1.5708,0,0,0,0], time_from_start: {sec: 3, nanosec: 0}} ] } }"` |
 
 ####  PLC Communication
 
 | Service Name | Service Type | Description | Usage |
 |------------|------------|------|----------|
-| `/hdr_ros2_driver/plc/get/relay_value` | hdr_msgs::srv::IoplcGet | Get relay values | `ros2 service call /hdr_ros2_driver/plc/get/relay_value hdr_msgs/srv/IoplcGet "{name: 'M', st: 100, len: 10}"` |
-| `/hdr_ros2_driver/control/get/ios/dio` | hdr_msgs::srv::IoRequest | Get digital inputs | `ros2 service call /hdr_ros2_driver/control/get/ios/di hdr_msgs/srv/IoRequest "{type: 'di', blk_no: 1, sig_no: 1}"` |
-| `/hdr_ros2_driver/control/get/ios/sio` | hdr_msgs::srv::IoRequest | Get serial I/O | `ros2 service call /hdr_ros2_driver/control/get/ios/sio hdr_msgs/srv/IoRequest "{type: 'sio', blk_no: 1, sig_no: 1}"` |
+| `/hdr_ros2_driver/plc/get/relay_value` | hdr_msgs::srv::IoplcGet | Get relay values | `ros2 service call /hdr_ros2_driver/plc/get/relay_value hdr_msgs/srv/IoplcGet "{type: 'M', st: 100, len: 10}"` |
+| `/hdr_ros2_driver/control/get/ios/dio` | hdr_msgs::srv::IoRequest | Get digital I/O values | `ros2 service call /hdr_ros2_driver/control/get/ios/dio hdr_msgs/srv/IoRequest "{type: 'di', blk_no: 1, sig_no: 1}"` |
+| `/hdr_ros2_driver/control/get/ios/sio` | hdr_msgs::srv::IoRequest | Get serial I/O values | `ros2 service call /hdr_ros2_driver/control/get/ios/sio hdr_msgs/srv/IoRequest "{type: 'si', sig_no: 1}"` |
 | `/hdr_ros2_driver/plc/post/relay_value` | hdr_msgs::srv::IoplcPost | Set relay values | `ros2 service call /hdr_ros2_driver/plc/post/relay_value hdr_msgs/srv/IoplcPost "{name: 'fb1.do0', value: 1}"` |
-| `/hdr_ros2_driver/control/post/ios/dio` | hdr_msgs::srv::IoRequest | Set digital I/O | `ros2 service call /hdr_ros2_driver/control/post/ios/dio hdr_msgs/srv/IoRequest "{type: 'do', blk_no: 1, sig_no: 1, val: 1}"` |
+| `/hdr_ros2_driver/control/post/ios/dio` | hdr_msgs::srv::IoRequest | Set digital I/O values | `ros2 service call /hdr_ros2_driver/control/post/ios/dio hdr_msgs/srv/IoRequest "{type: 'do', blk_no: 1, sig_no: 1, val: 1}"` |
 
 #### File Management
 
 | Service Name | Service Type | Description | Usage |
 |--------------|--------------|-------------|-------|
-| `/hdr_ros2_driver/file/get/files` | hdr_msgs::srv::FilePath | Get file content | `ros2 service call /hdr_ros2_driver/file/get/files hdr_msgs::srv::FilePath "{path: 'project/jobs/0001.job'}"` |
-| `/hdr_ros2_driver/file/get/file_info` | hdr_msgs::srv::FilePath | Get information about a specific file | `ros2 service call /hdr_ros2_driver/file/get/file_info hdr_msgs::srv::FilePath "{path: 'project/jobs/0001.job'}"` |
-| `/hdr_ros2_driver/file/get/file_list` | hdr_msgs::srv::FileList | Get a list of files in a directory | `ros2 service call /hdr_ros2_driver/file/get/file_list hdr_msgs::srv::FileList "{path: 'project/jobs', incl_file: true, incl_dir: false}"` |
-| `/hdr_ros2_driver/file/get/file_exist` | hdr_msgs::srv::FilePath | Check if a file exists | `ros2 service call /hdr_ros2_driver/file/get/file_exist hdr_msgs::srv::FilePath "{path: 'project/jobs/0001.job'}"` |
-| `/hdr_ros2_driver/file/post/rename_file` | hdr_msgs::srv::FileRename | Rename a file | `ros2 service call /hdr_ros2_driver/file/post/rename_file hdr_msgs::srv::FileRename "{pathname_from: 'project/jobs/0001.job', pathname_to: 'project/jobs/4321.job'}"` |
-| `/hdr_ros2_driver/file/post/mkdir` | hdr_msgs::srv::FilePath | Create a new directory | `ros2 service call /hdr_ros2_driver/file/post/mkdir hdr_msgs::srv::FilePath "{path: 'project/jobs/special'}"` |
-| `/hdr_ros2_driver/file/post/files` | hdr_msgs::srv::FileSend | Upload files | `ros2 service call /hdr_ros2_driver/file/post/files hdr_msgs::srv::FileSend "{target_file: 'project/jobs/test.job', source_file: '/home/test/test.job'}"` |
-| `/hdr_ros2_driver/file/delete/files` | hdr_msgs::srv::FilePath | Delete files | `ros2 service call /hdr_ros2_driver/file/delete/files hdr_msgs::srv::FilePath "{path: 'project/jobs/0001.job'}"` |
+| `/hdr_ros2_driver/file/get/files` | hdr_msgs::srv::FilePath | Get file content | `ros2 service call /hdr_ros2_driver/file/get/files hdr_msgs/srv/FilePath "{path: 'project/jobs/0001.job'}"` |
+| `/hdr_ros2_driver/file/get/file_info` | hdr_msgs::srv::FilePath | Get information about a specific file | `ros2 service call /hdr_ros2_driver/file/get/file_info hdr_msgs/srv/FilePath "{path: 'project/jobs/0001.job'}"` |
+| `/hdr_ros2_driver/file/get/file_list` | hdr_msgs::srv::FileList | Get a list of files in a directory | `ros2 service call /hdr_ros2_driver/file/get/file_list hdr_msgs/srv/FileList "{path: 'project/jobs', incl_file: true, incl_dir: false}"` |
+| `/hdr_ros2_driver/file/get/file_exist` | hdr_msgs::srv::FilePath | Check if a file exists | `ros2 service call /hdr_ros2_driver/file/get/file_exist hdr_msgs/srv/FilePath "{path: 'project/jobs/0001.job'}"` |
+| `/hdr_ros2_driver/file/post/rename_file` | hdr_msgs::srv::FileRename | Rename a file | `ros2 service call /hdr_ros2_driver/file/post/rename_file hdr_msgs/srv/FileRename "{pathname_from: 'project/jobs/0001.job', pathname_to: 'project/jobs/4321.job'}"` |
+| `/hdr_ros2_driver/file/post/mkdir` | hdr_msgs::srv::FilePath | Create a new directory | `ros2 service call /hdr_ros2_driver/file/post/mkdir hdr_msgs/srv/FilePath "{path: '/project/jobs/special'}"` |
+| `/hdr_ros2_driver/file/post/files` | hdr_msgs::srv::FileSend | Upload files | `ros2 service call /hdr_ros2_driver/file/post/files hdr_msgs/srv/FileSend "{target_file: 'project/jobs/test.job', source_file: '/home/test/test.job'}"` |
+| `/hdr_ros2_driver/file/delete/files` | hdr_msgs::srv::FilePath | Delete files | `ros2 service call /hdr_ros2_driver/file/delete/files hdr_msgs/srv/FilePath "{path: 'project/jobs/0001.job'}"` |
 
 #### Task Management
 
 | Service Name | Service Type | Description | Usage |
 |------------|------------|------|----------|
-| `/hdr_ros2_driver/task/post/reset` | std_srvs::srv::Trigger | Reset task execution | `ros2 service call /hdr_ros2_driver/task/post/reset std_srvs::srv::Trigger` |
-| `/hdr_ros2_driver/task/post/assign_var` | hdr_msgs::srv::ProgramVar | Assign variable values | `ros2 service call /hdr_ros2_driver/task/post/assign_var hdr_msgs/srv/ProgramVar "{name: 'a', scope: 'local', expr: '14 + 2', save: 'true'}"` |
+| `/hdr_ros2_driver/task/post/cur_prog_cnt` | hdr_msgs::srv::ProgramCnt | Set current program count | `ros2 service call /hdr_ros2_driver/task/post/cur_prog_cnt hdr_msgs/srv/ProgramCnt "{pno: 1, sno: 0, fno: 0, ext_sel: 0}"` |
+| `/hdr_ros2_driver/task/post/reset` | std_srvs::srv::Trigger | Reset task execution | `ros2 service call /hdr_ros2_driver/task/post/reset std_srvs/srv/Trigger` |
+| `/hdr_ros2_driver/task/post/assign_var` | hdr_msgs::srv::ProgramVar | Assign variable values | `ros2 service call /hdr_ros2_driver/task/post/assign_var hdr_msgs/srv/ProgramVar "{name: 'a', scope: 'local', expr: '14 + 2', save: true}"` |
 | `/hdr_ros2_driver/task/post/release_wait` | std_srvs::srv::Trigger | Release a wait state | `ros2 service call /hdr_ros2_driver/task/post/release_wait std_srvs/srv/Trigger` |
 | `/hdr_ros2_driver/task/post/set_cur_pc_idx` | hdr_msgs::srv::Number | Set current program counter index | `ros2 service call /hdr_ros2_driver/task/post/set_cur_pc_idx hdr_msgs/srv/Number "{data: 0}"` |
-| `/hdr_ros2_driver/task/post/solve_expr` | hdr_msgs::srv::ProgramVar | Solve an expression | `ros2 service call /hdr_ros2_driver/task/post/solve_expr hdr_msgs/srv/ProgramVar "{name: 'a', scope: 'local'}"` |
+| `/hdr_ros2_driver/task/post/solve_expr` | hdr_msgs::srv::ProgramVar | Solve an expression | `ros2 service call /hdr_ros2_driver/task/post/solve_expr hdr_msgs/srv/ProgramVar "{scope: 'local', expr: 'a + 10'}"` |
 | `/hdr_ros2_driver/task/post/execute_move` | hdr_msgs::srv::ExecuteMove | Execute a move command | `ros2 service call /hdr_ros2_driver/task/post/execute_move hdr_msgs/srv/ExecuteMove "{task_no: 0, stmt: 'move SP,spd=1sec,accu=0,tool=1 [0, 90, 0, 0, 0, 0]'}"` |
 
 #### Console and System
 
 | Service Name | Service Type | Description | Usage |
 |------------|------------|------|----------|
-| `/hdr_ros2_driver/console/post/execute_cmd` | hdr_msgs::srv::ExecuteCmd | Execute console commands | `ros2 service call /hdr_ros2_driver/console/post/execute_cmd hdr_msgs/srv/ExecuteCmd "{cmd_line: 'rl.stop'}"` |
+| `/hdr_ros2_driver/console/post/execute_cmd` | hdr_msgs::srv::ExecuteCmd | Execute console commands | `ros2 service call /hdr_ros2_driver/console/post/execute_cmd hdr_msgs/srv/ExecuteCmd "{cmd_line: ['rl.stop'], period_ms: 100}"` |
 | `/hdr_ros2_driver/clock/get/date_time` | std_srvs::srv::Trigger | Get system date and time | `ros2 service call /hdr_ros2_driver/clock/get/date_time std_srvs/srv/Trigger` |
-| `/hdr_ros2_driver/clock/put/date_time` | hdr_msgs::srv::DateTime | Set system date and time | `ros2 service call /hdr_ros2_driver/clock/put/date_time hdr_msgs/srv/DateTime "{year: 2025, month: 5, day: 13, hour: 14, minute: 30, second: 0}"` |
+| `/hdr_ros2_driver/clock/put/date_time` | hdr_msgs::srv::DateTime | Set system date and time | `ros2 service call /hdr_ros2_driver/clock/put/date_time hdr_msgs/srv/DateTime "{year: 2025, mon: 5, day: 13, hour: 14, min: 30, sec: 0}"` |
 | `/hdr_ros2_driver/log/get/manager` | hdr_msgs::srv::LogManager | Get log manager information | `ros2 service call /hdr_ros2_driver/log/get/manager hdr_msgs/srv/LogManager "{n_item: 50, cat_p: 'E,W,N', id_min: 0, ts_min: '2025/05/01 00:00:00.000', ts_max: '2025/05/13 23:59:59.999'}"` |
 
 ### Test
 
 #### Service Test
+
+> **⚠️ Pre-Test Requirements:**
+> Before running the service test, make sure the following conditions are met:
+>
+> * The controller must be in **REMOTE mode**.
+> * A global variable `a` must be initialized in the controller environment.
+> * On the TP, navigate to **System → User Environment → wait(di/wi)** and **disable the forced wait option**.
+> * **For `emergency_stop_test` (category: `robot`):** A job file containing position values must be running on the TP.
 
 Available service categories for testing:
 

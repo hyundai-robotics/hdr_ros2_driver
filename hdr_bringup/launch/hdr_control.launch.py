@@ -28,7 +28,7 @@ def generate_launch_description():
             default_value='ha006b',
             choices=[
                 'ha006b', 'hdf7_9', 'hdf8_8', 'hdr10l_19',
-                'hdr20_17', 'hdr50_22', 'hdr220_26', 'hh020'
+                'hdr20_17', 'hdr50_22', 'hdr220_26', 'hh020', 'hdr35_20'
             ],
             description="HDR robot model to use.",
         ),
@@ -38,23 +38,8 @@ def generate_launch_description():
             description="IP address of the robots OpenAPI server.",
         ),
         DeclareLaunchArgument(
-            "openapi_port",
-            default_value="8888",
-            description="Port number of the robots OpenAPI server.",
-        ),
-        DeclareLaunchArgument(
-            "command_port",
-            default_value="8000",
-            description="Port number for trajectory command transmission.",
-        ),
-        DeclareLaunchArgument(
-            "command_start_time",
-            default_value="-1.0",
-            description="Start time for command execution (-1.0 for immediate start).",
-        ),
-        DeclareLaunchArgument(
             "command_buffer_size",
-            default_value="5",
+            default_value="20",
             description="Buffer size for command data.",
         ),
         DeclareLaunchArgument(
@@ -88,9 +73,6 @@ def launch_setup(context, *args, **kwargs):
     """Set up and return the nodes/actions for ros2_control and state publishing."""
     robot_model = LaunchConfiguration("robot_model").perform(context)
     openapi_ip = LaunchConfiguration("openapi_ip").perform(context)
-    openapi_port = LaunchConfiguration("openapi_port").perform(context)
-    command_port = LaunchConfiguration("command_port").perform(context)
-    command_start_time = LaunchConfiguration("command_start_time").perform(context)
     command_buffer_size = LaunchConfiguration("command_buffer_size").perform(context)
     controllers_config_package = LaunchConfiguration("controllers_config_package")
     controllers_file = LaunchConfiguration("controllers_file")
@@ -110,9 +92,6 @@ def launch_setup(context, *args, **kwargs):
         launch_arguments={
             'robot_model': robot_model,
             'openapi_ip': openapi_ip,
-            'openapi_port': openapi_port,
-            'command_port': command_port,
-            'command_start_time': command_start_time,
             'command_buffer_size': command_buffer_size,
             'controllers_config_package': controllers_config_package,
             'controllers_file': controllers_file,
@@ -130,8 +109,7 @@ def launch_setup(context, *args, **kwargs):
             )
         ),
         launch_arguments={
-            'openapi_ip': openapi_ip,
-            'openapi_port': openapi_port
+            'openapi_ip': openapi_ip
         }.items(),
     )
 

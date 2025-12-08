@@ -20,23 +20,25 @@ This repository provides the HD Hyundai Robotics ROS2 driver, including nodes th
 - Hi6-N80 (HK)
 - Hi6-T15
 
-> ❗**Note:** The HD Hyundai Robotics ROS2 driver does **not** support the Hi5a controller. </br>
-The controller software must be updated to version **v60.34-00** or later. </br>
-This version is planned for release in **October**.
-A real-time interface for motion control, state feedback, and I/O operations (with a 2 ms cycle) is scheduled to be released in **November 2025**. </br>
-All REST API-based communication requires the robot to be in REMOTE mode.
+> ❗**Note:** The HD Hyundai Robotics ROS2 driver does **not** support the Hi5a controller.  
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+The controller software must be updated to version **v61.01-00** or later.
+This version is planned for release in **Q2 2026**.
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A real-time interface for motion control, state feedback, and I/O operations (with a 2 ms cycle) is scheduled to be released in **September 2025**.
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;All REST API-based communication requires the robot to be in REMOTE mode.
 
 The currently supported robot models are:
-- ha006b [[HA006B](https://hd-hyundairobotics.com/en/biz/product/detail/7)]
-- hdf7_9 [[HDF7-9 (HH7)](https://hd-hyundairobotics.com/en/biz/product/detail/4)]
-- hdf8_8 [[HDF8-8 (HH8)](https://hd-hyundairobotics.com/en/biz/product/detail/6)]
-- hdr10l_19 [[HDR10L-19](https://hd-hyundairobotics.com/en/biz/product/detail/84)]
-- hdr20_17 [[HDR20-17 (UH020)](https://hd-hyundairobotics.com/en/biz/product/detail/84)]
-- hdr50_22 [[HDR50-22 (HH050)](https://hd-hyundairobotics.com/en/biz/product/detail/14)]
-- hdr220_26 [[HDR220-26 (HS220)](https://hd-hyundairobotics.com/en/biz/product/detail/21)]
-- hh020 [[HH020](https://hd-hyundairobotics.com/en/biz/product/detail/11)]
+- ha006b [[HA006B](https://hd-hyundairobotics.com/biz/product/detail/7)]
+- hdf7_9 [[HDF7-9 (HH7)](https://hd-hyundairobotics.com/biz/product/detail/4)]
+- hdf8_8 [[HDF8-8 (HH8)](https://hd-hyundairobotics.com/biz/product/detail/6)]
+- hdr10l_19 [[HDR10L-19 (UH010L)](https://hd-hyundairobotics.com/biz/product/detail/84)]
+- hdr20_17 [[HDR20-17 (UH020)](https://hd-hyundairobotics.com/biz/product/detail/40)]
+- hdr50_22 [[HDR50-22 (HH050)](https://hd-hyundairobotics.com/biz/product/detail/14)]
+- hdr220_26 [[HDR220-26 (HS220)](https://hd-hyundairobotics.com/biz/product/detail/21)]
+- hh020 [[HH020](https://hd-hyundairobotics.com/biz/product/detail/11)]
+- hdr35_20 [[HDR35-20(UH035)](https://www.hd-hyundairobotics.com/biz/product/detail/41)]
 
-> ❗**Note:** The robot models `hdf7_9`, `hdf8_8`, `hdr20_17`, `hdr50_22`, and `hdr220_26` are updated names for the previously known models `HH7`, `HH8`, `UH020`, `HH050`, and `HS220`, respectively.
+> ❗**Note:** The robot models `hdf7_9`, `hdf8_8`, `hdr50_22`, `hdr220_26`, and `hdr35_20` are updated names for the previously known models `HH7`, `HH8`, `HH050`, `HS220`, and `UH035` respectively.
 
 ---
 
@@ -94,6 +96,8 @@ source install/setup.bash
 
 > ⚠️ **WARNING:** Operating industrial robots without proper safety measures can lead to severe injury. Always verify that the workspace is clear and that the emergency stop is readily accessible before launching the ROS2 control interface.
 
+> ⚠️ **WARNING:** Press the **emergency stop button** to ensure user safety when the physical communication between the PC and the controller is lost during industrial robot operation.
+
 ### Preparation
 Before launching the ROS2 driver, ensure that your PC is properly connected to the robot controller via Ethernet. Refer to the following guide to verify successful communication between the PC and the robot controller: [hdr_ros2_driver README](hdr_ros2_driver/README.MD)
 
@@ -141,15 +145,12 @@ The following launch arguments are available in `hdr_control.launch.py` and `hdr
 
 | Argument Name              | Type   | Default                   | Description                                                                 |
 |----------------------------|--------|---------------------------|-----------------------------------------------------------------------------|
-| `robot_model`              | string | `ha006b`                  | HDR robot model to use. Choose from `[ha006b, hdf7_9, hdf8_8, hdr10l_19, hdr20_17, hdr50_22, hdr220_26, hh020]` |
-| `openapi_ip`               | string | `192.168.1.150`           | IP address of the robot's OpenAPI server                                    |
-| `openapi_port`             | int    | `8888`                    | Port number for OpenAPI server                                              |
-| `command_port`          | int    | `8000`                    | Port number for trajectory command transmission                               |
-| `command_start_time`    | float  | `-1.0`                    | Start time for command execution (-1.0 for immediate start)              |
+| `robot_model`              | string | `ha006b`                  | HDR robot model to use. Choose from `[ha006b, hdf7_9, hdf8_8, hdr10l_19, hdr20_17, hdr50_22, hdr220_26, hh020, hdr35_20]` |
 | `command_buffer_size`   | int    | `5`                       | Buffer size for command data management                                  |
 | `controllers_config_package`| string | `hdr_hardware_interface` | Package providing ROS2 controller configuration files                       |
 | `controllers_file`         | string | `default_controllers.yaml`| YAML file defining controllers to load                                      |
-| `kinematics_file`          | string | `default_kinematics.yaml`| YAML file specifying the robot's kinematics       
+| `kinematics_config_package`| string | `hdr_hardware_interface` | Package providing robot kinematics file                                      |
+| `kinematics_file`          | string | `default_kinematics.yaml`| YAML file specifying the robot's kinematics                                  |
 
 
 #### Setup the ROS2 controller
@@ -178,14 +179,14 @@ controller_state:
      - joint_trajectory_controller
      
    inactive_controllers:
-     - costum_controller
+     - custom_controller
 ```
 
 Inactive controllers are not started by default, but they can be activated at runtime using standard **controller_manager** services such as:
 
 ```bash
 ros2 control switch_controllers \
-  --activate costum_controller \
+  --activate custom_controller \
   --deactivate joint_trajectory_controller
 ```
 
@@ -198,7 +199,7 @@ Configurations such as SRDF, controller settings, and kinematic parameters are d
 
 The `joint_limits.yaml` file located in the `{robot_model}_moveit_config/config` folder defines parameters for specifying scaling factors, which can also be adjusted via the RViz interface.
 Due to current controller limitations, it is strongly recommended to use scaling factor values **no greater than 0.2** for stable operation.
-This issue is planned to be addressed along with the upcoming release of a real-time interface for motion control, scheduled for November 2025.
+This issue is planned to be addressed along with the upcoming release of a real-time interface for motion control, scheduled for September 2025.
 
 ```yaml
 default_velocity_scaling_factor: 0.1
@@ -212,6 +213,7 @@ Depending on the system settings, the device may automatically enter power savin
 
 1. Touch the [2: Control Parameter > 1: Control Environment Setting] menu.
 2. [Power saving function]: You can enable or disable the power saving function to suit your operational requirements.
+<div align="left"><img src=".doc/power_saving.png" alt="HDR moveit" style="width: 60%;"/></div> 
 
 > **Recommendation**: For continuous operation or to avoid unexpected interruptions, consider disabling the power saving function entirely.
 
@@ -230,6 +232,15 @@ ros2 service call /hdr_ros2_driver/robot/post/operation std_srvs/srv/SetBool "da
 ```
 
 > **Note**: If you frequently encounter power saving mode issues during operation, use the configuration menu above to disable the power saving function permanently.
+
+### When the robot does not operate in Motor ON & Start Mode
+#### Normal Operation
+When both **Motor ON** and **Start Mode** are enabled, the robot operates normally.
+
+#### When the robot does not operate
+If Start Mode is not activated while **Motor ON** is enabled, the system generates the error “External Command Operation Disabled (E01554).”
+If an infeasible command value is given (e.g., beyond physical limits), an axis overspeed error may occur, causing the robot to stop.
+In such cases, the system can be recovered by reactivating **Motor ON + Start Mode**.
 
 ---
 
