@@ -31,7 +31,7 @@ def generate_launch_description():
             default_value='ha006b',
             choices=[
                 'ha006b', 'hdf7_9', 'hdf8_8', 'hdr10l_19',
-                'hdr20_17', 'hdr50_22', 'hdr220_26', 'hh020'
+                'hdr20_17', 'hdr50_22', 'hdr220_26', 'hh020', 'hdr35_20'
             ],
             description="HDR robot model to use.",
         ),
@@ -39,21 +39,6 @@ def generate_launch_description():
             "openapi_ip",
             default_value="192.168.1.150",
             description="IP address of the robots OpenAPI server.",
-        ),
-        DeclareLaunchArgument(
-            "openapi_port",
-            default_value="8888",
-            description="Port number of the robots OpenAPI server.",
-        ),
-        DeclareLaunchArgument(
-            "command_port",
-            default_value="8000",
-            description="Port number for trajectory command transmission.",
-        ),
-        DeclareLaunchArgument(
-            "command_start_time",
-            default_value="-1.0",
-            description="Start time for command execution (-1.0 for immediate start).",
         ),
         DeclareLaunchArgument(
             "command_buffer_size",
@@ -110,9 +95,6 @@ def launch_setup(context, *args, **kwargs):
     """Set up and return the nodes/actions for ros2_control and state publishing."""
     robot_model = LaunchConfiguration("robot_model")
     openapi_ip = LaunchConfiguration("openapi_ip")
-    openapi_port = LaunchConfiguration("openapi_port")
-    command_port = LaunchConfiguration("command_port")
-    command_start_time = LaunchConfiguration("command_start_time")
     command_buffer_size = LaunchConfiguration("command_buffer_size")
     use_sim = LaunchConfiguration("use_sim")
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
@@ -164,17 +146,8 @@ def launch_setup(context, *args, **kwargs):
             "openapi_ip:=",
             openapi_ip,
             " ",
-            "openapi_port:=",
-            openapi_port,
-            " ",
             "update_rate:=",
             update_rate,
-            " ",
-            "command_port:=",
-            command_port,
-            " ",
-            "command_start_time:=",
-            command_start_time,
             " ",
             "command_buffer_size:=",
             command_buffer_size,

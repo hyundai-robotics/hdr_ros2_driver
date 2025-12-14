@@ -28,7 +28,7 @@ def generate_launch_description():
     declared_arguments = [
         DeclareLaunchArgument(
             'robot_model',
-            default_value='hdr10l_19',
+            default_value='hdr35_20',
             description="HDR robot model to use.",
         ),
         DeclareLaunchArgument(
@@ -44,7 +44,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'initial_positions_file',
             default_value=PathJoinSubstitution([
-                FindPackageShare(LaunchConfiguration('hdr10l_19_moveit_config')),
+                FindPackageShare(LaunchConfiguration('hdr35_20_moveit_config')),
                 'config',
                 'initial_positions.yaml'
             ]),
@@ -64,7 +64,7 @@ def launch_setup(context, *args, **kwargs):
     use_mock_hardware = LaunchConfiguration("use_mock_hardware")
     initial_positions_file = LaunchConfiguration("initial_positions_file")
 
-    moveit_config_pkg = get_package_share_directory('hdr10l_19_moveit_config')
+    moveit_config_pkg = get_package_share_directory('hdr35_20_moveit_config')
     
     pkg_path = FindPackageShare("hdr_description")
     xacro_path = PathJoinSubstitution([pkg_path, "urdf", "hdr.urdf.xacro"])
@@ -96,7 +96,7 @@ def launch_setup(context, *args, **kwargs):
         ]
     )
 
-    srdf_xacro = os.path.join(moveit_config_pkg, 'config', 'hdr10l_19.srdf.xacro')
+    srdf_xacro = os.path.join(moveit_config_pkg, 'config', 'hdr35_20.srdf.xacro')
 
     robot_description_semantic_content = load_srdf_semantic(
         srdf_xacro,
@@ -106,16 +106,16 @@ def launch_setup(context, *args, **kwargs):
     robot_description = {'robot_description': robot_description_content}
     robot_description_semantic = {'robot_description_semantic': robot_description_semantic_content}
     publish_robot_description_semantic = {"publish_robot_description_semantic": True}
-    robot_description_kinematics_yaml = load_yaml("hdr10l_19_moveit_config", "config/kinematics.yaml")
+    robot_description_kinematics_yaml = load_yaml("hdr35_20_moveit_config", "config/kinematics.yaml")
     robot_description_kinematics = {
         "robot_description_kinematics": robot_description_kinematics_yaml
     }
 
     joint_limits_yaml = load_yaml(
-        "hdr10l_19_moveit_config", "config/joint_limits.yaml"
+        "hdr35_20_moveit_config", "config/joint_limits.yaml"
     )
     pilz_cartesian_limits_yaml = load_yaml(
-        "hdr10l_19_moveit_config", "config/pilz_cartesian_limits.yaml"
+        "hdr35_20_moveit_config", "config/pilz_cartesian_limits.yaml"
     )
     robot_description_planning = {
         "robot_description_planning": {
@@ -139,11 +139,11 @@ def launch_setup(context, *args, **kwargs):
         ("pilz", "config/pilz_industrial_motion_planner_planning.yaml"),
         ("ompl", "config/ompl_planning.yaml"),
     ]:
-        planner_yaml = load_yaml("hdr10l_19_moveit_config", config_yaml)
+        planner_yaml = load_yaml("hdf7_9_moveit_config", config_yaml)
         planning_pipeline_config[planner_name].update(planner_yaml)
 
     moveit_controllers = {
-        "moveit_simple_controller_manager": load_yaml("hdr10l_19_moveit_config", "config/moveit_controllers.yaml"),
+        "moveit_simple_controller_manager": load_yaml("hdr35_20_moveit_config", "config/moveit_controllers.yaml"),
         "moveit_controller_manager": "moveit_simple_controller_manager/MoveItSimpleControllerManager",
     }
     
