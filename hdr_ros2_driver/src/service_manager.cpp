@@ -87,6 +87,13 @@ void ServiceManager::SetupAllServices() {
                                        &ServiceManager::HandlePostRobotEmergencyStop);
   SetupService<hdr_msgs::srv::Emergency>(service_names::robot::kEmergencyStopTest,
                                          &ServiceManager::HandlePostRobotEmergencyStopTest);
+  SetupService<std_srvs::srv::Trigger>(service_names::robot::kJointTrajBuffAvail,
+                                       &ServiceManager::HandleGetJointTrajBuffAvail);
+  SetupService<std_srvs::srv::Trigger>(service_names::robot::kInitJointTrajectory,
+                                       &ServiceManager::HandlePostInitJointTrajectory);
+  SetupService<hdr_msgs::srv::JointTrajectoryPoints>(
+      service_names::robot::kInsertJointTrajectoryPoints,
+      &ServiceManager::HandlePostInsertJointTrajectoryPoints);
 
   // ------------------ IO PLC Services ------------------
   SetupService<hdr_msgs::srv::IoplcGet>(service_names::io_plc::kGetRelayValue,

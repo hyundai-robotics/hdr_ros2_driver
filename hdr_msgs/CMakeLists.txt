@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   
@@ -29,6 +30,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DateTime.srv"
 
   "srv/PoseCur.srv"
+  "srv/JointTrajectoryPoints.srv"
 
   "srv/IoplcGet.srv"
   "srv/IoplcPost.srv"
@@ -37,7 +39,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ExecuteMove.srv"
   "srv/ExecuteCmd.srv"
   
-  DEPENDENCIES builtin_interfaces std_msgs 
+  DEPENDENCIES builtin_interfaces std_msgs trajectory_msgs
 )
 
 if(BUILD_TESTING)

@@ -2,9 +2,9 @@
 
 #### Table of Contents
 
-- [Overview](#1-overview)
-- [Package Structure](#2-package-structure)
-- [Usage](#3-usage)
+- [Overview](#overview)
+- [Package Structure](#package-structure)
+- [Usage](#usage)
 
 ---
 
@@ -29,6 +29,7 @@ The `hdr_msgs` package defines the custom ROS2 message types used by the HD Hyun
 | `srv/IoplcGet.srv`    | Read PLC memory (e.g., relays, M, S, R). Supports both direct and named signal addressing. |
 | `srv/IoplcPost.srv`   | Writes to PLC memory (relays) using symbolic names such as M, S, R, or FBx.y.|
 | `srv/IoRequest.srv`   | Used to access digital, serial, or user I/O. The type field specifies the kind of I/O, such as 'di', 'do', 'si', or 'so'. and blk_no and sig_no specify block and signal indices. The 'val' field is used when setting I/O values and is ignored when performing a read operation. |
+| `srv/JointTrajectoryPoints.srv` | Sends a full ROS2 `trajectory_msgs/JointTrajectory` message (joint names and multiple points) to the robot controller. Used for inserting motion trajectories into the controller buffer via `/project/robot/trajectory/joint_traject_insert_points`. |
 | `srv/LogManager.srv`  | Query log entries with filters: category (E, W, etc.), ID range, and timestamp. |
 | `srv/Number.srv`      | Generic service that sends/receives an integer. Used for tool number, coordinate system, index setting, etc.|
 | `srv/OpCnd.srv`       | Read or write operational condition such as playback mode or user coordinate system. |

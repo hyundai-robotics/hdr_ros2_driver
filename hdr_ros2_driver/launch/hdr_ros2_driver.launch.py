@@ -14,18 +14,12 @@ def generate_launch_description():
             default_value='192.168.1.150',
             description='IP address for the OpenAPI server'
         ),
-        DeclareLaunchArgument(
-            'openapi_port',
-            default_value='8888',
-            description='Port number for the OpenAPI server'
-        ),
         Node(
             package='hdr_ros2_driver',
             executable='hdr_ros2_driver_node',
             name='hdr_ros2_driver',
             parameters=[{
-                'openapi_ip': LaunchConfiguration('openapi_ip'),
-                'openapi_port': LaunchConfiguration('openapi_port')
+                'openapi_ip': LaunchConfiguration('openapi_ip')
             }],
             output='screen',
             emulate_tty=True,

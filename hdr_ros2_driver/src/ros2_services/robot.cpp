@@ -227,7 +227,7 @@ void ServiceManager::HandlePostRobotOperation(
       return;
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     auto [result, success] = driver_->PostRobotOperation(request->data);
     response->success = success;
@@ -350,5 +350,180 @@ void ServiceManager::HandlePostRobotEmergencyStopTest(
     response->success = false;
     response->message = e.what();
     RCLCPP_ERROR(node_->get_logger(), "Failed to execute emergency stop test: %s", e.what());
+  }
+}
+/**
+ * @param request Empty request object (Trigger service has no fields).
+ * @param response The response object containing success status and the returned JSON message.
+ *
+ * @brief Handles the request to get the available joint trajectory buffer size.
+ *
+ * @details
+ * This service queries the number of available slots in the controller's internal joint trajectory
+ * buffer. The returned JSON includes the field `"val"` representing the available slot count
+ * (0–2048). Use this service before sending new trajectory data to ensure there is enough buffer
+ * capacity for additional points.
+ *
+ * Example response:
+ * @code{.json}
+ * {
+ *   "val": 2048
+ * }
+ * @endcode
+ *
+ * @note The maximum buffer capacity is 2048 points. If the value is 0, the buffer is full and
+ * new trajectories cannot be inserted until motion execution clears space.
+ *
+ * 🔗 API Reference:
+ * [GET
+ * joint_traject_buf_avail](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/5-robot/1-get/7-joint_traject_buf_avail)
+ */
+void ServiceManager::HandleGetJointTrajBuffAvail(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+  try {
+    auto [result, success] = driver_->GetJointTrajBuffAvail();
+    response->success = success;
+    response->message = result.dump();
+  } catch (const std::exception& e) {
+    response->success = false;
+    response->message = e.what();
+    RCLCPP_ERROR(node_->get_logger(), "Failed to get joint trajectory buffer availability: %s",
+                 e.what());
+  }
+}
+
+/**
+ * @param request Empty request object (Trigger service has no fields).
+ * @param response The response object containing success status and the returned JSON message.
+ *
+ * @brief Handles the request to initialize (clear) the joint trajectory buffer.
+ *
+ * @details
+ * This service calls the controller API to clear all stored trajectory points from the internal
+ * buffer. It should be used:
+ * - Before sending the first trajectory when the robot is stopped.
+ * - After an error recovery (e.g., motion error or E-stop event) to reset the buffer state.
+ *
+ * @warning
+ * Calling this service **while motion is active** will immediately stop the robot and clear
+ * all pending trajectory points, possibly causing E-stop or program interruption.
+ *
+ * 🔗 API Reference:
+ * [POST
+ * joint_traject_init](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/5-robot/2-post/7-joint_traject_init)
+ */
+void ServiceManager::HandlePostInitJointTrajectory(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+  try {
+    auto [result, success] = driver_->PostInitJointTrajectory();
+    response->success = success;
+    response->message = result.dump();
+  } catch (const std::exception& e) {
+    response->success = false;
+    response->message = e.what();
+    RCLCPP_ERROR(node_->get_logger(), "Failed to initialize joint trajectory buffer: %s", e.what());
+  }
+}
+/**
+ * @param request The request object containing a ROS2 JointTrajectory message
+ *        with joint names and trajectory points.
+ * @param response The response object containing success status and the JSON result message.
+ *
+ * @brief Handles the request to insert joint trajectory points into the controller buffer.
+ *
+ * @details
+ * Converts a ROS2 `trajectory_msgs/JointTrajectory` message into the JSON structure required by
+ * the HDR Open API, then sends it to the controller via
+ * `POST /project/robot/trajectory/joint_traject_insert_points`.
+ *
+ * Requirements:
+ * - Robot program must be running in **auto mode** (e.g., job with `"wait di1"`).
+ * - Each trajectory must contain at least 2 points.
+ * - The first point’s `time_from_start` must be `0.0` when starting from a stop state.
+ * - The time sequence must be strictly increasing across points.
+ *
+ * Example request payload:
+ * @code{.json}
+ * {
+ *   "joint_names": ["j1", "j2", "j3", "j4", "j5", "j6"],
+ *   "points": {
+ *     "point_1": {
+ *       "positions": [0, 1.570796, 0, 0, 0, 0],
+ *       "time_from_start": 0.0
+ *     },
+ *     "point_2": {
+ *       "positions": [0.05, 1.570796, 0, 0, 0, 0],
+ *       "time_from_start": 3.0
+ *     }
+ *   }
+ * }
+ * @endcode
+ *
+ * Usage notes:
+ * - Use `HandlePostInitJointTrajectory()` to clear the buffer before the first request.
+ * - Use `HandleGetJointTrajBuffAvail()` to check buffer availability before sending.
+ * - Continuous trajectories should ensure smooth time/position transitions between segments.
+ *
+ * Common 403 errors:
+ * - **E01554:** Program not running (job not active).
+ * - **ERR_TOO_FEW_POINTS (-6):** Fewer than 2 points.
+ * - **ERR_POINTS_EXCEED_BUFFER (-8):** Not enough buffer capacity.
+ *
+ * 🔗 API Reference:
+ * [POST
+ * joint_traject_insert_points](https://hrbook-hrc.web.app/#/view/doc-hi6-open-api/english/5-robot/5-trajectory/2-post/2-joint_traject_insert_points)
+ */
+void ServiceManager::HandlePostInsertJointTrajectoryPoints(
+    const std::shared_ptr<hdr_msgs::srv::JointTrajectoryPoints::Request> request,
+    std::shared_ptr<hdr_msgs::srv::JointTrajectoryPoints::Response> response) {
+  try {
+    // Extract the JointTrajectory message from the request
+    const auto& traj = request->trajectory;
+
+    // -------------------------------------------------------------
+    // Convert ROS2 JointTrajectory message to JSON format
+    // required by the REST API endpoint:
+    // POST /project/robot/trajectory/joint_traject_insert_points
+    // -------------------------------------------------------------
+    nlohmann::json j_points;
+    for (size_t i = 0; i < traj.points.size(); ++i) {
+      const auto& pt = traj.points[i];
+
+      // Convert ROS2 builtin_interfaces/Duration to double (seconds)
+      double tfs = static_cast<double>(pt.time_from_start.sec) +
+                   static_cast<double>(pt.time_from_start.nanosec) * 1e-9;
+
+      // Each trajectory point must be named as "point_1", "point_2", ...
+      std::string key = "point_" + std::to_string(i + 1);
+
+      // Construct a JSON entry for this point
+      j_points[key] = {
+          {"positions", pt.positions},
+          {"time_from_start", tfs},
+      };
+    }
+
+    // Final JSON payload for the REST request
+    nlohmann::json trajectory_json = {
+        {"joint_names", traj.joint_names},
+        {"points", j_points},
+    };
+
+    // -------------------------------------------------------------
+    // Call the HDR driver to post trajectory points
+    // -------------------------------------------------------------
+    auto [result, success] = driver_->PostInsertJointTrajectoryPoints(trajectory_json);
+
+    // Fill service response
+    response->success = success;
+    response->message = result.dump();
+
+  } catch (const std::exception& e) {
+    // Handle any exception and return error message
+    response->success = false;
+    response->message = e.what();
+    RCLCPP_ERROR(node_->get_logger(), "Failed to insert joint trajectory points: %s", e.what());
   }
 }
